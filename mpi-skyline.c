@@ -57,10 +57,6 @@ void read_input(points_t *points)
         fclose(file);
         exit(EXIT_FAILURE);
     }
-
-    printf("D = %d\n", D);
-    printf("N = %d\n", N);
-
     // Allocate memory for points
     P = (float *)malloc(D * N * sizeof(*P));
     assert(P);
@@ -386,14 +382,12 @@ int main(int argc, char *argv[])
      * Snodo chiave
      */
 
+    int *global_skyline = NULL;
+    int global_num_skyline = 0;
+
     if (total_skyline_points < WORKER_NPOINTS)
     {
         int N, D;
-        if (rank == 0)
-        {
-            fprintf(stderr, "Total points in S first : %d\n", total_skyline_points);
-        }
-
         if (rank == 0)
         {
             N = gathered.N;
@@ -434,19 +428,72 @@ int main(int argc, char *argv[])
         points_t partition;
         partition.D = D;
         partition.N = rank == 0 ? MASTER_NPOINTS : WORKER_NPOINTS;
+        int offset = (rank == 0 ? 0 : MASTER_NPOINTS + (rank - 1) * WORKER_NPOINTS);
+        partition.P = S_first + offset * D;
 
-        partition.P = S_first + (rank == 0 ? 0 : MASTER_NPOINTS + (rank - 1) * WORKER_NPOINTS) * D;
+        // now each processor checks his partition of S' against the other point of S' and removes dominated points from its own partition
+
+        // to do so more efficiently, each process skips the checking against the points in its own partition, defining a start and end index between which not to check
+        int start_index = offset;
+        int end_index = offset + partition.N;
+
+   
+
+        int *s = (int *)malloc(partition.N * sizeof(int));
+        int r = partition.N;
+
+        for (int i = 0; i < partition.N; i++)
+        {
+            s[i] = 1;
+        }
+
+        for (int i = 0; i < partition.N; i++)
+        {
+            if (s[i])
+            {
+                int j = 0;
+                while (j < N)
+                {   
+
+                    if (dominates(&(S_first[j * D]), &(partition.P[i * D]), D))
+                    {
+                        s[i] = 0;
+                        r--;
+                        break;
+                    }
+                    j++;
+                    if (j == start_index)
+                    {
+                        j = end_index;
+                    }
+                    
+                }
+            }
+        }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        
+
+        // gather the total r from all processes using mpi_reduce
+
+        MPI_Reduce(&r, &global_num_skyline, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+       
+
+        // now we need to gather the points that were not deleted in the partition, to do so
+        // we just need to concatenate the various "s" arrays, then the print skyline will handle the rest
+
+        global_skyline = (int *)malloc(N * sizeof(int));
+
+        MPI_Gather(s, partition.N, MPI_INT, global_skyline, partition.N, MPI_INT, 0, MPI_COMM_WORLD);
+
      
+        
     }
-    MPI_Barrier(MPI_COMM_WORLD);
 
-    if (rank == 0)
-    {
 
-        int *global_skyline = (int *)malloc(total_skyline_points * sizeof(int));
-
-        int global_num_skyline = skyline(&gathered, global_skyline);
-
+    if(rank == 0){
         elapsed = hpc_gettime() - tstart;
 
         print_skyline(&gathered, global_skyline, global_num_skyline);
