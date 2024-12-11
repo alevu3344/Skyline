@@ -20,12 +20,12 @@ typedef struct
 
 void read_input(points_t *points)
 {
-    char buf[1024];
+    char buf[2048];
     int N, D;
     float *P;
 
     // Open the input file
-    const char *filename = "datasets/test1.in"; // Adjust filename if needed
+    const char *filename = "datasets/test3.in"; // Adjust filename if needed
     FILE *file = fopen(filename, "r");
     if (!file)
     {
@@ -81,29 +81,6 @@ void read_input(points_t *points)
     points->P = P;
     points->N = N;
     points->D = D;
-}
-
-// Debugging function to write partition to file
-void write_partition_to_file(const char *filename, points_t partition)
-{
-    FILE *file = fopen(filename, "w");
-    if (!file)
-    {
-        perror("Failed to open file");
-        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-    }
-
-    for (int i = 0; i < partition.N; ++i)
-    {
-        fprintf(file, "Point %d: ", i);
-        for (int j = 0; j < partition.D; ++j)
-        {
-            fprintf(file, "%f ", partition.P[i * partition.D + j]);
-        }
-        fprintf(file, "\n");
-    }
-
-    fclose(file);
 }
 
 void free_points(points_t *points)
@@ -236,6 +213,12 @@ void scatter_points(points_t *points, points_t *local_points, int rank, int size
     }
 
     MPI_Scatterv(P, sendcounts, displs, MPI_FLOAT, local_points->P, D * local_num_points, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+    if (rank == 0)
+    {
+        free(sendcounts);
+        free(displs);
+    }
 }
 
 void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_points_perp, int rank, int size)
@@ -265,6 +248,7 @@ void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_
 
     if (rank == 0)
     {
+
         int offset = 0;
         for (int i = 0; i < size; i++)
         {
@@ -273,10 +257,9 @@ void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_
         }
     }
 
-    int *recvcounts = NULL;
+    int *recvcounts = (int *)malloc(size * sizeof(int));
     if (rank == 0)
     {
-        recvcounts = (int *)malloc(size * sizeof(int));
         for (int i = 0; i < size; i++)
         {
             recvcounts[i] = num_points_per_process[i] * D;
@@ -293,6 +276,9 @@ void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_
         MPI_FLOAT,
         0,
         MPI_COMM_WORLD);
+
+    free(recvcounts);
+    free(displs);
 }
 
 int main(int argc, char *argv[])
@@ -385,115 +371,107 @@ int main(int argc, char *argv[])
     int *global_skyline = NULL;
     int global_num_skyline = 0;
 
-    if (total_skyline_points < WORKER_NPOINTS)
+    int N;
+
+    if (rank == 0)
     {
-        int N, D;
-        if (rank == 0)
-        {
-            N = gathered.N;
-            D = gathered.D;
-        }
-
-        MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
-        MPI_Bcast(&D, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-        float *S_first = (float *)malloc(D * N * sizeof(float));
-
-        if (rank == 0)
-        {
-            for (int i = 0; i < N; i++)
-            {
-                for (int j = 0; j < D; j++)
-                {
-                    S_first[i * D + j] = gathered.P[i * D + j];
-                }
-            }
-        }
-
-        // I send S' to every process using a broadcast
-        MPI_Bcast(S_first, N * D, MPI_FLOAT, 0, MPI_COMM_WORLD);
-        /**
-         * Each processor P_i then determines for a
-         * subset S_i' ⊆ S' of points which points in S_i' are dominated
-         * by points in S' and removes these points from S_i. At the
-         * end of this round, we perform another all-to-all communi-
-         * cation to collect the points in sets S_i' that were not deleted in
-         * processor P_0 . These points form sky(S), and processor P0
-         * returns this set to the user.
-         */
-
-        int WORKER_NPOINTS = N / size;
-        int MASTER_NPOINTS = WORKER_NPOINTS + (N % size);
-
-        points_t partition;
-        partition.D = D;
-        partition.N = rank == 0 ? MASTER_NPOINTS : WORKER_NPOINTS;
-        int offset = (rank == 0 ? 0 : MASTER_NPOINTS + (rank - 1) * WORKER_NPOINTS);
-        partition.P = S_first + offset * D;
-
-        // now each processor checks his partition of S' against the other point of S' and removes dominated points from its own partition
-
-        // to do so more efficiently, each process skips the checking against the points in its own partition, defining a start and end index between which not to check
-        int start_index = offset;
-        int end_index = offset + partition.N;
-
-   
-
-        int *s = (int *)malloc(partition.N * sizeof(int));
-        int r = partition.N;
-
-        for (int i = 0; i < partition.N; i++)
-        {
-            s[i] = 1;
-        }
-
-        for (int i = 0; i < partition.N; i++)
-        {
-            if (s[i])
-            {
-                int j = 0;
-                while (j < N)
-                {   
-
-                    if (dominates(&(S_first[j * D]), &(partition.P[i * D]), D))
-                    {
-                        s[i] = 0;
-                        r--;
-                        break;
-                    }
-                    j++;
-                    if (j == start_index)
-                    {
-                        j = end_index;
-                    }
-                    
-                }
-            }
-        }
-
-        MPI_Barrier(MPI_COMM_WORLD);
-
-        
-
-        // gather the total r from all processes using mpi_reduce
-
-        MPI_Reduce(&r, &global_num_skyline, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-
-       
-
-        // now we need to gather the points that were not deleted in the partition, to do so
-        // we just need to concatenate the various "s" arrays, then the print skyline will handle the rest
-
-        global_skyline = (int *)malloc(N * sizeof(int));
-
-        MPI_Gather(s, partition.N, MPI_INT, global_skyline, partition.N, MPI_INT, 0, MPI_COMM_WORLD);
-
-     
-        
+        N = gathered.N;
+        D = gathered.D;
     }
 
+    MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&D, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    if(rank == 0){
+    float *S_first = (float *)malloc(D * N * sizeof(float));
+
+    if (rank == 0)
+    {
+        for (int i = 0; i < N; i++)
+        {
+            for (int j = 0; j < D; j++)
+            {
+                S_first[i * D + j] = gathered.P[i * D + j];
+            }
+        }
+    }
+
+    // I send S' to every process using a broadcast
+    MPI_Bcast(S_first, N * D, MPI_FLOAT, 0, MPI_COMM_WORLD);
+    /**
+     * Each processor P_i then determines for a
+     * subset S_i' ⊆ S' of points which points in S_i' are dominated
+     * by points in S' and removes these points from S_i. At the
+     * end of this round, we perform another all-to-all communi-
+     * cation to collect the points in sets S_i' that were not deleted in
+     * processor P_0 . These points form sky(S), and processor P0
+     * returns this set to the user.
+     */
+
+    WORKER_NPOINTS = N / size;
+    MASTER_NPOINTS = WORKER_NPOINTS + (N % size);
+
+    points_t partition;
+    partition.D = D;
+    partition.N = rank == 0 ? MASTER_NPOINTS : WORKER_NPOINTS;
+    int offset = (rank == 0 ? 0 : MASTER_NPOINTS + (rank - 1) * WORKER_NPOINTS);
+    partition.P = S_first + offset * D;
+
+    // now each processor checks his partition of S' against the other point of S' and removes dominated points from its own partition
+
+    // to do so more efficiently, each process skips the checking against the points in its own partition, defining a start and end index between which not to check
+    int start_index = offset;
+    int end_index = offset + partition.N;
+
+    int *s = (int *)malloc(partition.N * sizeof(int));
+    int r = partition.N;
+
+    for (int i = 0; i < partition.N; i++)
+    {
+        s[i] = 1;
+    }
+
+    for (int i = 0; i < partition.N; i++)
+    {
+        if (s[i])
+        {
+            int j = 0;
+            while (j < N)
+            {
+                if (j == start_index)
+                {
+                    j = end_index;
+                    if (j < start_index)
+                    {
+                        printf("Invalid jump to end_index\n");
+                        exit(1);
+                    }
+                }
+
+                if (s[i] && dominates(&(S_first[j * D]), &(partition.P[i * D]), D))
+                {
+                    s[i] = 0;
+                    r--;
+                }
+                j++;
+            }
+        }
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    // gather the total r from all processes using mpi_reduce
+
+    MPI_Reduce(&r, &global_num_skyline, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    // now we need to gather the points that were not deleted in the partition, to do so
+    // we just need to concatenate the various "s" arrays, then the print skyline will handle the rest
+
+    global_skyline = (int *)malloc(N * sizeof(int));
+
+    MPI_Gather(s, partition.N, MPI_INT, global_skyline, partition.N, MPI_INT, 0, MPI_COMM_WORLD);
+
+    if (rank == 0)
+    {
         elapsed = hpc_gettime() - tstart;
 
         print_skyline(&gathered, global_skyline, global_num_skyline);
@@ -510,9 +488,11 @@ int main(int argc, char *argv[])
 
     MPI_Barrier(MPI_COMM_WORLD);
     free(local_points);
+    partition.P = NULL;
     free(local_skyline);
     free(local_skyline_points);
     free(num_skyline_points_per_process);
+    free(S_first);
     MPI_Finalize();
     return 0;
 }
