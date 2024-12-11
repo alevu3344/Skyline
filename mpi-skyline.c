@@ -417,7 +417,7 @@ int main(int argc, char *argv[])
         }
 
         // I send S' to every process using a broadcast
-        MPI_Bcast(S_first, N*D, MPI_FLOAT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(S_first, N * D, MPI_FLOAT, 0, MPI_COMM_WORLD);
         /**
          * Each processor P_i then determines for a
          * subset S_i' ⊆ S' of points which points in S_i' are dominated
@@ -435,37 +435,8 @@ int main(int argc, char *argv[])
         partition.D = D;
         partition.N = rank == 0 ? MASTER_NPOINTS : WORKER_NPOINTS;
 
-        //partition.P = S_first + (rank == 0 ? 0 : (MASTER_NPOINTS+(rank - 1)*(MASTER_NPOINTS)) * D); 
-
-        switch(rank)
-        {
-            case 0:
-                partition.P = S_first;
-                break;
-            case 1:
-                partition.P = S_first + MASTER_NPOINTS * D;
-                break;
-            case 2:
-                partition.P = S_first + (MASTER_NPOINTS + WORKER_NPOINTS) * D;
-                break;
-            case 3:
-                partition.P = S_first + (MASTER_NPOINTS + 2 * WORKER_NPOINTS) * D;
-                break;
-            default:
-                break;
-        }
-
-        // Distribute the data for each partition (the actual division logic may depend on your specific partitioning strategy)
-        // This step assumes you already have logic to select the appropriate subset of points for each process.
-        // You may need to use MPI_Scatter or similar here to distribute the points among processes if necessary.
-
-        // write each partition to a separate file
-        char filename[32];
-        sprintf(filename, "RANGO%d", rank);
-        write_partition_to_file(filename, partition);
-
-        
-
+        partition.P = S_first + (rank == 0 ? 0 : MASTER_NPOINTS + (rank - 1) * WORKER_NPOINTS) * D;
+     
     }
     MPI_Barrier(MPI_COMM_WORLD);
 
