@@ -52,13 +52,4 @@ distributed and is representative of the points in sky(S).
 This general framework in principle allows the use of
 any sequential skyline algorithm to perform the local sky-
 line computations in the first round, as well as the filtering
-step in the second round. For the first round, we choose
-BBS because only few points in each set Si belong to
-sky(Si), which makes BBS’s pruning strategy highly ef-
-fective. In the second round, the structure of S′ as the union
-of p local skylines results in about a quarter of the points in
-S′ belonging to sky(S). Hence, the pruning strategy is less
-effective, and DC outperforms BBS on sets of up to 50,000
-points and queries on up to 5 dimensions. Thus, we use
-DC when the queries are low-dimensional and S′ is small;
-otherwise, we use BBS.
+step in the second round. 

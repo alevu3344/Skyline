@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <mpi.h>
+#include <string.h>
 
 #include "hpc.h"
 
@@ -84,6 +85,29 @@ void read_input(points_t *points)
     points->P = P;
     points->N = N;
     points->D = D;
+}
+
+// Debugging function to write partition to file
+void write_partition_to_file(const char *filename, points_t partition)
+{
+    FILE *file = fopen(filename, "w");
+    if (!file)
+    {
+        perror("Failed to open file");
+        MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < partition.N; ++i)
+    {
+        fprintf(file, "Point %d: ", i);
+        for (int j = 0; j < partition.D; ++j)
+        {
+            fprintf(file, "%f ", partition.P[i * partition.D + j]);
+        }
+        fprintf(file, "\n");
+    }
+
+    fclose(file);
 }
 
 void free_points(points_t *points)
@@ -218,7 +242,7 @@ void scatter_points(points_t *points, points_t *local_points, int rank, int size
     MPI_Scatterv(P, sendcounts, displs, MPI_FLOAT, local_points->P, D * local_num_points, MPI_FLOAT, 0, MPI_COMM_WORLD);
 }
 
-void gather_points(points_t * gathered, points_t * local_points,int * num_skyline_points_perp, int rank, int size)
+void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_points_perp, int rank, int size)
 {
     int D = local_points->D;
     int N = local_points->N;
@@ -273,15 +297,15 @@ void gather_points(points_t * gathered, points_t * local_points,int * num_skylin
         MPI_FLOAT,
         0,
         MPI_COMM_WORLD);
-
 }
-
 
 int main(int argc, char *argv[])
 {
     MPI_Init(&argc, &argv);
     points_t points;
     int rank, size;
+    int WORKER_NPOINTS;
+    int MASTER_NPOINTS;
 
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -289,7 +313,12 @@ int main(int argc, char *argv[])
     if (rank == 0)
     {
         read_input(&points);
+        WORKER_NPOINTS = points.N / size;
+        MASTER_NPOINTS = WORKER_NPOINTS + (points.N % size);
     }
+
+    MPI_Bcast(&WORKER_NPOINTS, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&MASTER_NPOINTS, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     double tstart = 0;
 
@@ -324,7 +353,6 @@ int main(int argc, char *argv[])
             skyline_index++;
         }
     }
-
     points_t local_sk_points_struct;
     local_sk_points_struct.D = D;
     local_sk_points_struct.N = local_num_skyline;
@@ -347,11 +375,98 @@ int main(int argc, char *argv[])
     }
 
     points_t gathered;
-    
-    gather_points(&gathered, &local_sk_points_struct,num_skyline_points_per_process, rank, size);
+
+    gather_points(&gathered, &local_sk_points_struct, num_skyline_points_per_process, rank, size);
 
     double elapsed;
 
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    /**
+     * Snodo chiave
+     */
+
+    if (total_skyline_points < WORKER_NPOINTS)
+    {
+        int N, D;
+        if (rank == 0)
+        {
+            fprintf(stderr, "Total points in S first : %d\n", total_skyline_points);
+        }
+
+        if (rank == 0)
+        {
+            N = gathered.N;
+            D = gathered.D;
+        }
+
+        MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
+        MPI_Bcast(&D, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+        float *S_first = (float *)malloc(D * N * sizeof(float));
+
+        if (rank == 0)
+        {
+            for (int i = 0; i < N; i++)
+            {
+                for (int j = 0; j < D; j++)
+                {
+                    S_first[i * D + j] = gathered.P[i * D + j];
+                }
+            }
+        }
+
+        // I send S' to every process using a broadcast
+        MPI_Bcast(S_first, N*D, MPI_FLOAT, 0, MPI_COMM_WORLD);
+        /**
+         * Each processor P_i then determines for a
+         * subset S_i' ⊆ S' of points which points in S_i' are dominated
+         * by points in S' and removes these points from S_i. At the
+         * end of this round, we perform another all-to-all communi-
+         * cation to collect the points in sets S_i' that were not deleted in
+         * processor P_0 . These points form sky(S), and processor P0
+         * returns this set to the user.
+         */
+
+        int WORKER_NPOINTS = N / size;
+        int MASTER_NPOINTS = WORKER_NPOINTS + (N % size);
+
+        points_t partition;
+        partition.D = D;
+        partition.N = rank == 0 ? MASTER_NPOINTS : WORKER_NPOINTS;
+
+        //partition.P = S_first + (rank == 0 ? 0 : (MASTER_NPOINTS+(rank - 1)*(MASTER_NPOINTS)) * D); 
+
+        switch(rank)
+        {
+            case 0:
+                partition.P = S_first;
+                break;
+            case 1:
+                partition.P = S_first + MASTER_NPOINTS * D;
+                break;
+            case 2:
+                partition.P = S_first + (MASTER_NPOINTS + WORKER_NPOINTS) * D;
+                break;
+            case 3:
+                partition.P = S_first + (MASTER_NPOINTS + 2 * WORKER_NPOINTS) * D;
+                break;
+            default:
+                break;
+        }
+
+        // Distribute the data for each partition (the actual division logic may depend on your specific partitioning strategy)
+        // This step assumes you already have logic to select the appropriate subset of points for each process.
+        // You may need to use MPI_Scatter or similar here to distribute the points among processes if necessary.
+
+        // write each partition to a separate file
+        char filename[32];
+        sprintf(filename, "RANGO%d", rank);
+        write_partition_to_file(filename, partition);
+
+        
+
+    }
     MPI_Barrier(MPI_COMM_WORLD);
 
     if (rank == 0)
