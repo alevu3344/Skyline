@@ -25,7 +25,7 @@ void read_input(points_t *points)
     float *P;
 
     // Open the input file
-    const char *filename = "datasets/test3.in"; // Adjust filename if needed
+    const char *filename = "datasets/circle.in"; // Adjust filename if needed
     FILE *file = fopen(filename, "r");
     if (!file)
     {
@@ -174,7 +174,7 @@ void print_skyline(const points_t *points, const int *s, int r)
     }
 }
 
-void print_skyline_to_file(char * filename, const points_t *points, const int *s, int r)
+void print_skyline_to_file(char *filename, const points_t *points, const int *s, int r)
 {
     FILE *file = fopen(filename, "w");
     fopen(filename, "w");
@@ -337,8 +337,6 @@ int main(int argc, char *argv[])
 
     scatter_points(&points, &local_points_struct, rank, size);
 
-    
-
     int D = local_points_struct.D;
 
     float *local_skyline_points = (float *)malloc(D * local_points_struct.N * sizeof(float));
@@ -372,11 +370,6 @@ int main(int argc, char *argv[])
 
     MPI_Gather(&local_num_skyline, 1, MPI_INT, num_skyline_points_per_process, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // printo the num_skyline_points_per_process
-
-    printf("Rank: %d, Num Skyline Points: %d\n", rank, local_num_skyline);
-
-    // calculate total number of skyline points
     int total_skyline_points = 0;
     if (rank == 0)
     {
@@ -394,9 +387,6 @@ int main(int argc, char *argv[])
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    /**
-     * Snodo chiave
-     */
 
     int global_num_skyline = 0;
 
@@ -413,9 +403,10 @@ int main(int argc, char *argv[])
 
     float *S_first = (float *)malloc(D * N * sizeof(float));
 
-    int * visited_S_first = (int *)malloc(D * N * sizeof(int));
+    int *visited_S_first = (int *)malloc(D * N * sizeof(int));
 
-    for(int i = 0; i < N; i++){
+    for (int i = 0; i < N; i++)
+    {
         visited_S_first[i] = 0;
     }
 
@@ -444,34 +435,39 @@ int main(int argc, char *argv[])
      * returns this set to the user.
      */
 
-    WORKER_NPOINTS = N / size;
-    MASTER_NPOINTS = WORKER_NPOINTS + (N % size);
-
     points_t partition;
     partition.D = D;
-    partition.N = rank == 0 ? MASTER_NPOINTS : WORKER_NPOINTS;
-    int offset = rank == 0 ? 0 : MASTER_NPOINTS + (rank - 1) * WORKER_NPOINTS;
-    partition.P = S_first + offset * D;
+    partition.N = local_sk_points_struct.N;
+
+
+    int *offsets = (int *)malloc(size * sizeof(int));
+
+    if (rank == 0)
+    {
+        for (int i = 0; i < size; i++)
+        {
+            offsets[i] = i == 0 ? 0 : (offsets[i - 1] + num_skyline_points_per_process[i - 1]);
+        }
+    }
+
+    //broadcast the offsets array to all processes
+    MPI_Bcast(offsets, size, MPI_INT, 0, MPI_COMM_WORLD);
+
+    partition.P = S_first + offsets[rank] * D;
 
     // now each processor checks his partition of S' against the other point of S' and removes dominated points from its own partition
 
     // to do so more efficiently, each process skips the checking against the points in its own partition, defining a start and end index between which not to check
-    int start_index = offset;
-    int end_index = offset + partition.N;
+    int start_index = offsets[rank];
+    int end_index = offsets[rank] + partition.N;
 
     int *s = (int *)malloc(partition.N * sizeof(int));
     int r = partition.N;
-
-    // Debug: print partition details
-    printf("Rank: %d, Partition N: %d, Offset: %d, Start Index: %d, End Index: %d\n",
-           rank, partition.N, offset, start_index, end_index);
 
     for (int i = 0; i < partition.N; i++)
     {
         s[i] = 1;
     }
-
-    
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -481,73 +477,34 @@ int main(int argc, char *argv[])
         {
             int j = 0;
             while (j < N)
-            {   
+            {
                 if (j == start_index)
                 {
-    
+
                     j = end_index;
                 }
-    
+
                 if (s[i] && dominates(&(S_first[j * D]), &(partition.P[i * D]), D))
                 {
 
                     s[i] = 0;
                     r--;
                 }
-                
-                
+
                 j++;
             }
         }
     }
 
-    /*
 
-    char filename_visits[100];
-    sprintf(filename_visits, "visited%d.txt", rank);
-    FILE *file_visits = fopen(filename_visits, "w");
-    for (int i = 0; i < N; i++)
-    {
-        fprintf(file_visits, "S_first[%d] : %d\n", i, visited_S_first[i]);
-    }
-
-    */
-
-    
-    // DA QUI IN GIU FUNZIONA
-    char filename[100];
-    sprintf(filename, "skyline%d.txt", rank);
-
-    print_skyline_to_file(filename, &partition, s, r);
-
-    /*
-    FILE *file = fopen(filename, "w");
-    for (int i = 0; i < partition.N; i++)
-    {
-        if (s[i])
-        {
-            for (int k = 0; k < D; k++)
-            {
-                fprintf(file, "%f ", partition.P[i * D + k]);
-            }
-            fprintf(file, "\n");
-        }
-    }
-    fclose(file);
-    */
 
     MPI_Barrier(MPI_COMM_WORLD);
 
-    // gather the total r from all processes using mpi_reduce
+    
 
     MPI_Reduce(&r, &global_num_skyline, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    // now we need to gather the points that were not deleted in the partition, to do so
-    // we just need to concatenate the various "s" arrays, then the print skyline will handle the rest
-
-    // int *global_skyline = (int *)malloc(N * sizeof(int));
-
-    // MPI_Gather(s, partition.N, MPI_INT, global_skyline, partition.N, MPI_INT, 0, MPI_COMM_WORLD);
+  
 
     int *global_skyline = NULL;
     int *sizes = NULL, *displs = NULL;
@@ -597,7 +554,7 @@ int main(int argc, char *argv[])
 
         free_points(&gathered);
 
-        free(global_skyline); 
+        free(global_skyline);
         free(sizes);
         free(displs);
     }
