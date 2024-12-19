@@ -1,3 +1,16 @@
+/****************************************************************************
+ * Alessandro Valmori
+ * 0001089308
+ * 
+ * Per compilare:
+ *
+ *       mpicc -std=c99 -Wall -Wpedantic -O2 mpi-skyline.c -o mpi-skyline
+ *
+ * Per eseguire il programma:
+ *
+ *       mpirun -np <num_processes> mpi-skyline < input > output  
+ *
+ ****************************************************************************/
 
 #if _XOPEN_SOURCE < 600
 #define _XOPEN_SOURCE 600
@@ -18,66 +31,35 @@ typedef struct
     int D;    /* Number of dimensions (columns of matrix P)   */
 } points_t;
 
-void read_input(points_t *points)
+void read_input( points_t *points )
 {
-    char buf[2048];
+    char buf[1024];
     int N, D;
     float *P;
 
-    // Open the input file
-    const char *filename = "datasets/circle.in"; // Adjust filename if needed
-    FILE *file = fopen(filename, "r");
-    if (!file)
-    {
-        fprintf(stderr, "FATAL: Unable to open file '%s'\n", filename);
-        exit(EXIT_FAILURE);
-    }
-
-    // Read the dimension (D)
-    if (1 != fscanf(file, "%d", &D))
-    {
-        fprintf(stderr, "FATAL: Cannot read the dimension from file\n");
-        fclose(file);
+    if (1 != scanf("%d", &D)) {
+        fprintf(stderr, "FATAL: can not read the dimension\n");
         exit(EXIT_FAILURE);
     }
     assert(D >= 2);
-
-    // Ignore the rest of the first line
-    if (NULL == fgets(buf, sizeof(buf), file))
-    {
-        fprintf(stderr, "FATAL: Cannot read the first line\n");
-        fclose(file);
+    if (NULL == fgets(buf, sizeof(buf), stdin)) { /* ignore rest of the line */
+        fprintf(stderr, "FATAL: can not read the first line\n");
         exit(EXIT_FAILURE);
     }
-
-    // Read the number of points (N)
-    if (1 != fscanf(file, "%d", &N))
-    {
-        fprintf(stderr, "FATAL: Cannot read the number of points\n");
-        fclose(file);
+    if (1 != scanf("%d", &N)) {
+        fprintf(stderr, "FATAL: can not read the number of points\n");
         exit(EXIT_FAILURE);
     }
-    // Allocate memory for points
-    P = (float *)malloc(D * N * sizeof(*P));
+    P = (float*)malloc( D * N * sizeof(*P) );
     assert(P);
-
-    // Read the points
-    for (int i = 0; i < N; i++)
-    {
-        for (int k = 0; k < D; k++)
-        {
-            if (1 != fscanf(file, "%f", &(P[i * D + k])))
-            {
-                fprintf(stderr, "FATAL: Failed to get coordinate %d of point %d\n", k, i);
-                fclose(file);
-                free(P);
+    for (int i=0; i<N; i++) {
+        for (int k=0; k<D; k++) {
+            if (1 != scanf("%f", &(P[i*D + k]))) {
+                fprintf(stderr, "FATAL: failed to get coordinate %d of point %d\n", k, i);
                 exit(EXIT_FAILURE);
             }
         }
     }
-
-    fclose(file);
-
     points->P = P;
     points->N = N;
     points->D = D;
@@ -173,31 +155,37 @@ void print_skyline(const points_t *points, const int *s, int r)
         }
     }
 }
-
-void print_skyline_to_file(char *filename, const points_t *points, const int *s, int r)
-{
-    FILE *file = fopen(filename, "w");
-    fopen(filename, "w");
-    const int D = points->D;
-    const int N = points->N;
-    const float *P = points->P;
-
-    fprintf(file, "%d\n", D);
-    fprintf(file, "%d\n", r);
-    for (int i = 0; i < N; i++)
-    {
-        if (s[i])
-        {
-            for (int k = 0; k < D; k++)
-            {
-                fprintf(file, "%f ", P[i * D + k]);
-            }
-            fprintf(file, "\n");
-        }
-    }
-    fclose(file);
-}
-
+/**
+ * @brief Scatters points data from the master process (rank 0) to all processes in an MPI environment.
+ *
+ * This function is designed to distribute a set of points stored in the `points_t` structure
+ * from the master process to all other processes in an MPI communicator. Each process, including
+ * the master, will receive a subset of the points, ensuring a balanced distribution (or close to it).
+ * 
+ * - The master process gets an additional portion of points if the total number of points
+ *   (`N`) is not evenly divisible by the number of processes (`size`).
+ * - Uses MPI's `MPI_Scatterv` to perform the distribution efficiently.
+ *
+ * @param points Pointer to the `points_t` structure holding the complete dataset (only used by the master process).
+ *               - `points->P`: Flat array of size `N * D` (N points, each with D dimensions).
+ *               - `points->D`: Number of dimensions per point.
+ *               - `points->N`: Total number of points in the dataset.
+ *               This parameter is ignored for non-master processes.
+ *
+ * @param local_points Pointer to the `points_t` structure where the received subset of points will be stored.
+ *                     This structure will be allocated and filled by the function for all processes.
+ *                     - `local_points->P`: Will contain the subset of points assigned to this process.
+ *                     - `local_points->D`: Number of dimensions per point (same as `points->D`).
+ *                     - `local_points->N`: Number of points received by this process.
+ *
+ * @param rank Rank of the current process in the MPI communicator (from 0 to `size - 1`).
+ * @param size Total number of processes in the MPI communicator.
+ *
+ * @note The function dynamically allocates memory for `local_points->P` on all processes.
+ *       The caller is responsible for freeing this memory after use.
+ *       For the master process, the `points` parameter should be initialized with valid data
+ *       before calling this function.
+ */
 void scatter_points(points_t *points, points_t *local_points, int rank, int size)
 {
 
@@ -245,6 +233,39 @@ void scatter_points(points_t *points, points_t *local_points, int rank, int size
     }
 }
 
+/**
+ * @brief Gathers points data from all processes in an MPI environment to the master process (rank 0).
+ *
+ * This function collects subsets of points stored in the `local_points` structures of each process
+ * and gathers them into a single `gathered` structure on the master process (rank 0).
+ * The number of points contributed by each process is specified by the `num_skyline_points_perp` array.
+ * 
+ * - Uses `MPI_Gatherv` for efficient gathering of data.
+ * - The data is concatenated in `gathered->P` on the master process, maintaining the order of ranks.
+ *
+ * @param gathered Pointer to the `points_t` structure where the gathered points will be stored (only used by the master process).
+ *                 This parameter is ignored for non-master processes.
+ *                 - `gathered->P`: Will contain all points from all processes.
+ *                 - `gathered->D`: Number of dimensions per point (same as `local_points->D`).
+ *                 - `gathered->N`: Total number of points gathered from all processes.
+ *                 Memory for `gathered->P` is dynamically allocated by the function and must be freed by the caller on rank 0.
+ *
+ * @param local_points Pointer to the `points_t` structure holding the subset of points for this process.
+ *                     - `local_points->P`: Flat array of size `N * D` (N points, each with D dimensions).
+ *                     - `local_points->D`: Number of dimensions per point.
+ *                     - `local_points->N`: Number of points in the local subset.
+ *
+ * @param num_skyline_points_perp Array of size `size` (number of processes) where each entry specifies
+ *                                the number of points contributed by the corresponding process.
+ *                                Must be valid on all processes.
+ *
+ * @param rank Rank of the current process in the MPI communicator (from 0 to `size - 1`).
+ * @param size Total number of processes in the MPI communicator.
+ *
+ * @note The function dynamically allocates memory for `gathered->P` on rank 0.
+ *       The caller must free this memory after use.
+ * @note The `num_skyline_points_perp` array must be consistent across all processes.
+ */
 void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_points_perp, int rank, int size)
 {
     int D = local_points->D;
@@ -312,7 +333,8 @@ int main(int argc, char *argv[])
     int rank, size;
     int WORKER_NPOINTS;
     int MASTER_NPOINTS;
-
+    int D;
+    int N;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
@@ -337,7 +359,7 @@ int main(int argc, char *argv[])
 
     scatter_points(&points, &local_points_struct, rank, size);
 
-    int D = local_points_struct.D;
+    D = local_points_struct.D;
 
     float *local_skyline_points = (float *)malloc(D * local_points_struct.N * sizeof(float));
 
@@ -364,8 +386,6 @@ int main(int argc, char *argv[])
     local_sk_points_struct.N = local_num_skyline;
     local_sk_points_struct.P = local_skyline_points;
 
-    MPI_Barrier(MPI_COMM_WORLD);
-
     int *num_skyline_points_per_process = (int *)malloc(size * sizeof(int));
 
     MPI_Gather(&local_num_skyline, 1, MPI_INT, num_skyline_points_per_process, 1, MPI_INT, 0, MPI_COMM_WORLD);
@@ -379,18 +399,15 @@ int main(int argc, char *argv[])
         }
     }
 
+    
+
     points_t gathered;
 
     gather_points(&gathered, &local_sk_points_struct, num_skyline_points_per_process, rank, size);
 
     double elapsed;
 
-    MPI_Barrier(MPI_COMM_WORLD);
-
-
     int global_num_skyline = 0;
-
-    int N;
 
     if (rank == 0)
     {
@@ -402,13 +419,6 @@ int main(int argc, char *argv[])
     MPI_Bcast(&D, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     float *S_first = (float *)malloc(D * N * sizeof(float));
-
-    int *visited_S_first = (int *)malloc(D * N * sizeof(int));
-
-    for (int i = 0; i < N; i++)
-    {
-        visited_S_first[i] = 0;
-    }
 
     if (rank == 0)
     {
@@ -422,23 +432,11 @@ int main(int argc, char *argv[])
         }
     }
 
-    // I send S' to every process using a broadcast
     MPI_Bcast(S_first, N * D, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
-    /**
-     * Each processor P_i then determines for a
-     * subset S_i' ⊆ S' of points which points in S_i' are dominated
-     * by points in S' and removes these points from S_i. At the
-     * end of this round, we perform another all-to-all communi-
-     * cation to collect the points in sets S_i' that were not deleted in
-     * processor P_0 . These points form sky(S), and processor P0
-     * returns this set to the user.
-     */
 
     points_t partition;
     partition.D = D;
     partition.N = local_sk_points_struct.N;
-
 
     int *offsets = (int *)malloc(size * sizeof(int));
 
@@ -450,14 +448,12 @@ int main(int argc, char *argv[])
         }
     }
 
-    //broadcast the offsets array to all processes
+   
     MPI_Bcast(offsets, size, MPI_INT, 0, MPI_COMM_WORLD);
 
     partition.P = S_first + offsets[rank] * D;
 
-    // now each processor checks his partition of S' against the other point of S' and removes dominated points from its own partition
-
-    // to do so more efficiently, each process skips the checking against the points in its own partition, defining a start and end index between which not to check
+    
     int start_index = offsets[rank];
     int end_index = offsets[rank] + partition.N;
 
@@ -469,7 +465,6 @@ int main(int argc, char *argv[])
         s[i] = 1;
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
 
     for (int i = 0; i < partition.N; i++)
     {
@@ -490,21 +485,12 @@ int main(int argc, char *argv[])
                     s[i] = 0;
                     r--;
                 }
-
                 j++;
             }
         }
     }
 
-
-
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    
-
     MPI_Reduce(&r, &global_num_skyline, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-
-  
 
     int *global_skyline = NULL;
     int *sizes = NULL, *displs = NULL;
@@ -532,12 +518,12 @@ int main(int argc, char *argv[])
         global_skyline = (int *)malloc(total_size * sizeof(int)); // Allocate the global buffer
     }
 
-    // Use MPI_Gatherv to gather arrays of varying sizes
+
     MPI_Gatherv(s, local_size, MPI_INT,
                 global_skyline, sizes, displs, MPI_INT,
                 0, MPI_COMM_WORLD);
 
-    // Master process can now use `global_skyline`
+
 
     if (rank == 0)
     {
@@ -551,7 +537,6 @@ int main(int argc, char *argv[])
         fprintf(stderr, "Execution time (s) %f\n", elapsed);
 
         free_points(&points);
-
         free_points(&gathered);
 
         free(global_skyline);
@@ -559,7 +544,6 @@ int main(int argc, char *argv[])
         free(displs);
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
     free(local_points);
     partition.P = NULL;
     free(local_skyline);
