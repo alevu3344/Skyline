@@ -6,9 +6,21 @@ if [ ! -d "datasets" ]; then
     exit 1
 fi
 
-# Define the number of iterations and processors
+# Define the number of iterations
 NUM_RUNS=2
-num_proc=4  # Set the number of processors (for OpenMP and OpenMPI)
+
+# Delete the benchmark files if they exist
+rm -f omp-benchmark.out
+rm -f mpi-benchmark.out
+
+# Output files
+serial_output="serial-benchmark.out"
+omp_output="omp-benchmark.out"
+mpi_output="mpi-benchmark.out"
+
+# Initialize output files
+echo "Running OpenMP Tests" > "$omp_output"
+echo "Running OpenMPI Tests" > "$mpi_output"
 
 # Loop over each input file in the datasets directory
 for input_file in datasets/*.in; do
@@ -20,83 +32,71 @@ for input_file in datasets/*.in; do
     echo "Running tests for input: $input_file"
     
     # Initialize total time variables
-    total_time_serial=0
     total_time_omp=0
     total_time_mpi=0
 
-    # Run the serial version NUM_RUNS times
-    for i in $(seq 1 $NUM_RUNS); do
-        echo "  Run $i (Serial)..."
-        # Capture stderr output to a variable
-        stderr_output=$(./skyline < "$input_file" 2>&1 > output.out)
+    # Loop through processor counts from 1 to 8
+    for num_proc in $(seq 1 8); do
+        echo "Running tests with $num_proc processors..."
         
-        # Debug: Echo the stderr output for inspection
-        echo "Debug (Serial Run $i): $stderr_output"
-        
-        # Extract the execution time from the stderr output
-        exec_time=$(echo "$stderr_output" | grep "Execution time (s)" | awk '{print $4}')
-        
-        # Check if exec_time is empty and skip if no time is found
-        if [ -z "$exec_time" ]; then
-            echo "Error: Could not extract execution time for Serial (Run $i)"
-            continue
-        fi
+        # Run the OpenMP version NUM_RUNS times
+        for i in $(seq 1 $NUM_RUNS); do
+            echo "  Run $i (OpenMP) with $num_proc processors..."
+            # Set the number of threads for OpenMP
+            export OMP_NUM_THREADS=$num_proc
+            # Capture stderr output to a variable and redirect stdout to the file
+            stderr_output=$(./omp-skyline < "$input_file" 2>&1 > /dev/null)
 
-        total_time_serial=$(echo "$total_time_serial + $exec_time" | bc)
+            exec_time=$(echo "$stderr_output" | grep "Execution time (s)" | awk '{print $4}')
+            
+            # Check if exec_time is empty and skip if no time is found
+            if [ -z "$exec_time" ]; then
+                echo "Error: Could not extract execution time for OpenMP (Run $i)"
+                continue
+            fi
+
+            total_time_omp=$(echo "$total_time_omp + $exec_time" | bc)
+
+            # Log the time to the OpenMP output file
+            echo "Run $i (OpenMP) for $input_file with $num_proc processors: $exec_time seconds" >> "$omp_output"
+        done
+
+        # Run the OpenMPI version NUM_RUNS times
+        for i in $(seq 1 $NUM_RUNS); do
+            echo "  Run $i (OpenMPI) with $num_proc processors..."
+            # Capture stderr output to a variable and redirect stdout to the file
+            stderr_output=$(mpirun --use-hwthread-cpus -np $num_proc mpi-skyline "$input_file" 2>&1 > /dev/null)
+            
+            
+            exec_time=$(echo "$stderr_output" | grep "Execution time (s)" | awk '{print $4}')
+            
+            # Check if exec_time is empty and skip if no time is found
+            if [ -z "$exec_time" ]; then
+                echo "Error: Could not extract execution time for OpenMPI (Run $i)"
+                continue
+            fi
+
+            total_time_mpi=$(echo "$total_time_mpi + $exec_time" | bc)
+
+            # Log the time to the OpenMPI output file
+            echo "Run $i (OpenMPI) for $input_file with $num_proc processors: $exec_time seconds" >> "$mpi_output"
+        done
+        # Set the scale variable for the number of decimal places
+        scale=6
+
+        # Calculate averages for the current processor count with the defined scale
+        avg_time_omp=$(echo "$total_time_omp / $NUM_RUNS" | bc -l)
+        avg_time_mpi=$(echo "$total_time_mpi / $NUM_RUNS" | bc -l)
+
+        # Use printf to format the time with a leading zero if necessary
+        formatted_avg_time_omp=$(printf "%0.6f" $avg_time_omp)
+        formatted_avg_time_mpi=$(printf "%0.6f" $avg_time_mpi)
+
+        # Append formatted average times to the corresponding output files
+        echo "Average time for OpenMP for $input_file with $num_proc processors: $formatted_avg_time_omp seconds" >> "$omp_output"
+        echo "Average time for OpenMPI for $input_file with $num_proc processors: $formatted_avg_time_mpi seconds" >> "$mpi_output"
+        
+        echo "------------------------------------" >> "$omp_output"
+        echo "------------------------------------" >> "$mpi_output"
     done
-
-    # Run the OpenMP version NUM_RUNS times
-    for i in $(seq 1 $NUM_RUNS); do
-        echo "  Run $i (OpenMP) with $num_proc processors..."
-        # Set the number of threads for OpenMP
-        export OMP_NUM_THREADS=$num_proc
-        # Capture stderr output to a variable
-        stderr_output=$(./omp-skyline < "$input_file" 2>&1 > output.out)
-        
-        # Debug: Echo the stderr output for inspection
-        echo "Debug (OpenMP Run $i): $stderr_output"
-        
-        exec_time=$(echo "$stderr_output" | grep "Execution time (s)" | awk '{print $4}')
-        
-        # Check if exec_time is empty and skip if no time is found
-        if [ -z "$exec_time" ]; then
-            echo "Error: Could not extract execution time for OpenMP (Run $i)"
-            continue
-        fi
-
-        total_time_omp=$(echo "$total_time_omp + $exec_time" | bc)
-    done
-
-    # Run the OpenMPI version NUM_RUNS times
-    for i in $(seq 1 $NUM_RUNS); do
-        echo "  Run $i (OpenMPI) with $num_proc processors..."
-        # Capture stderr output to a variable
-       
-        stderr_output=$(mpirun --use-hwthread-cpus -np $num_proc mpi-skyline "$input_file" 2>&1 > output.out)
-        
-        # Debug: Echo the stderr output for inspection
-        echo "Debug (OpenMPI Run $i): $stderr_output"
-        
-        exec_time=$(echo "$stderr_output" | grep "Execution time (s)" | awk '{print $4}')
-        
-        # Check if exec_time is empty and skip if no time is found
-        if [ -z "$exec_time" ]; then
-            echo "Error: Could not extract execution time for OpenMPI (Run $i)"
-            continue
-        fi
-
-        total_time_mpi=$(echo "$total_time_mpi + $exec_time" | bc)
-    done
-
-    # Calculate averages
-    avg_time_serial=$(echo "$total_time_serial / $NUM_RUNS" | bc -l)
-    avg_time_omp=$(echo "$total_time_omp / $NUM_RUNS" | bc -l)
-    avg_time_mpi=$(echo "$total_time_mpi / $NUM_RUNS" | bc -l)
-
-    # Print results for this input file
-    echo "Average time for serial: $avg_time_serial seconds"
-    echo "Average time for OpenMP: $avg_time_omp seconds"
-    echo "Average time for OpenMPI: $avg_time_mpi seconds"
-    echo "------------------------------------"
-
 done
