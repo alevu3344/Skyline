@@ -16,4 +16,4 @@ $(EXE_MPI): CC=mpicc
 mpi: $(EXE_MPI)
 
 clean:
-	\rm -f $(EXE) *.o *~
+	\rm -f $(EXE) *.o *~ *out

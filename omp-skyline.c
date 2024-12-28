@@ -20,10 +20,11 @@
 
 #include "hpc.h"
 
-typedef struct {
-    float *P;   /* coordinates P[i][j] of point i               */
-    int N;      /* Number of points (rows of matrix P)          */
-    int D;      /* Number of dimensions (columns of matrix P)   */
+typedef struct
+{
+    float *P; /* coordinates P[i][j] of point i               */
+    int N;    /* Number of points (rows of matrix P)          */
+    int D;    /* Number of dimensions (columns of matrix P)   */
 } points_t;
 
 /**
@@ -37,30 +38,36 @@ typedef struct {
  * pn-1,0 pn-1,1 ... pn-1,d-1
  *
  */
-void read_input( points_t *points )
+void read_input(points_t *points)
 {
     char buf[1024];
     int N, D;
     float *P;
 
-    if (1 != scanf("%d", &D)) {
+    if (1 != scanf("%d", &D))
+    {
         fprintf(stderr, "FATAL: can not read the dimension\n");
         exit(EXIT_FAILURE);
     }
     assert(D >= 2);
-    if (NULL == fgets(buf, sizeof(buf), stdin)) { /* ignore rest of the line */
+    if (NULL == fgets(buf, sizeof(buf), stdin))
+    { /* ignore rest of the line */
         fprintf(stderr, "FATAL: can not read the first line\n");
         exit(EXIT_FAILURE);
     }
-    if (1 != scanf("%d", &N)) {
+    if (1 != scanf("%d", &N))
+    {
         fprintf(stderr, "FATAL: can not read the number of points\n");
         exit(EXIT_FAILURE);
     }
-    P = (float*)malloc( D * N * sizeof(*P) );
+    P = (float *)malloc(D * N * sizeof(*P));
     assert(P);
-    for (int i=0; i<N; i++) {
-        for (int k=0; k<D; k++) {
-            if (1 != scanf("%f", &(P[i*D + k]))) {
+    for (int i = 0; i < N; i++)
+    {
+        for (int k = 0; k < D; k++)
+        {
+            if (1 != scanf("%f", &(P[i * D + k])))
+            {
                 fprintf(stderr, "FATAL: failed to get coordinate %d of point %d\n", k, i);
                 exit(EXIT_FAILURE);
             }
@@ -71,7 +78,7 @@ void read_input( points_t *points )
     points->D = D;
 }
 
-void free_points( points_t* points )
+void free_points(points_t *points)
 {
     free(points->P);
     points->P = NULL;
@@ -79,17 +86,21 @@ void free_points( points_t* points )
 }
 
 /* Returns 1 iff |p| dominates |q| */
-int dominates( const float * p, const float * q, int D )
+int dominates(const float *p, const float *q, int D)
 {
     /* The following loops could be merged, but the keep them separated
        for the sake of readability */
-    for (int k=0; k<D; k++) {
-        if (p[k] < q[k]) {
+    for (int k = 0; k < D; k++)
+    {
+        if (p[k] < q[k])
+        {
             return 0;
         }
     }
-    for (int k=0; k<D; k++) {
-        if (p[k] > q[k]) {
+    for (int k = 0; k < D; k++)
+    {
+        if (p[k] > q[k])
+        {
             return 1;
         }
     }
@@ -102,42 +113,45 @@ int dominates( const float * p, const float * q, int D )
  * points that belongs to the skyline. The caller is responsible for
  * allocating the array `s` of length at least `points->N`.
  */
-int skyline(const points_t *points, int *s) {
+int skyline(const points_t *points, int *s)
+{
     const int D = points->D;
     const int N = points->N;
     const float *P = points->P;
-    int r = 0; // Start at 0 and count skyline points accurately
+    int r = N; // Start with the total number of points
 
-    // Initialize all points as part of the skyline
-    #pragma omp parallel for
-    for (int i = 0; i < N; i++) {
+// Initialize all points as part of the skyline
+#pragma omp parallel for
+    for (int i = 0; i < N; i++)
+    {
         s[i] = 1;
     }
 
-    // Compare points in parallel
-    #pragma omp parallel for
-    for (int i = 0; i < N; i++) {
-        if (s[i]) {
-            for (int j = 0; j < N; j++) {
-                if (i != j && s[j] && dominates(&(P[i * D]), &(P[j * D]), D)) {
-                    #pragma omp atomic write
-                    s[j] = 0;
+// Compare points in parallel and adjust the skyline count
+#pragma omp parallel for
+    for (int i = 0; i < N; i++)
+    {
+    
+        for (int j = 0; j < N; j++)
+        {
+            if (s[j])
+            {
+                if (i != j && s[j] && dominates(&(P[j * D]), &(P[i * D]), D))
+                {
+                    // Only the thread that successfully modifies `s[j]` decrements `r`
+                    #pragma omp critical
+                    {
+                            s[i] = 0;
+                            r--;
+                    }
+                    break;
                 }
             }
         }
     }
 
-    // Recompute the count of skyline points
-    #pragma omp parallel for reduction(+:r)
-    for (int i = 0; i < N; i++) {
-        if (s[i]) {
-            r++;
-        }
-    }
-
     return r;
 }
-
 
 /**
  * Print the coordinates of points belonging to the skyline `s` to
@@ -145,7 +159,7 @@ int skyline(const points_t *points, int *s) {
  * The output format is the same as the input format, so that this
  * program can process its own output.
  */
-void print_skyline( const points_t* points, const int *s, int r )
+void print_skyline(const points_t *points, const int *s, int r)
 {
     const int D = points->D;
     const int N = points->N;
@@ -153,27 +167,31 @@ void print_skyline( const points_t* points, const int *s, int r )
 
     printf("%d\n", D);
     printf("%d\n", r);
-    for (int i=0; i<N; i++) {
-        if ( s[i] ) {
-            for (int k=0; k<D; k++) {
-                printf("%f ", P[i*D + k]);
+    for (int i = 0; i < N; i++)
+    {
+        if (s[i])
+        {
+            for (int k = 0; k < D; k++)
+            {
+                printf("%f ", P[i * D + k]);
             }
             printf("\n");
         }
     }
 }
 
-int main( int argc, char* argv[] )
+int main(int argc, char *argv[])
 {
     points_t points;
 
-    if (argc != 1) {
+    if (argc != 1)
+    {
         fprintf(stderr, "Usage: %s < input_file > output_file\n", argv[0]);
         return EXIT_FAILURE;
     }
 
     read_input(&points);
-    int *s = (int*)malloc(points.N * sizeof(*s));
+    int *s = (int *)malloc(points.N * sizeof(*s));
     assert(s);
     const double tstart = hpc_gettime();
     const int r = skyline(&points, s);

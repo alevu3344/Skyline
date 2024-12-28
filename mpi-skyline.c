@@ -31,39 +31,62 @@ typedef struct
     int D;    /* Number of dimensions (columns of matrix P)   */
 } points_t;
 
-void read_input( points_t *points )
+void read_input(const char *filename, points_t *points)
 {
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        fprintf(stderr, "FATAL: cannot open file '%s'\n", filename);
+        exit(EXIT_FAILURE);
+    }
+
     char buf[1024];
     int N, D;
     float *P;
 
-    if (1 != scanf("%d", &D)) {
-        fprintf(stderr, "FATAL: can not read the dimension\n");
+    if (1 != fscanf(file, "%d", &D)) {
+        fprintf(stderr, "FATAL: cannot read the dimension\n");
+        fclose(file);
         exit(EXIT_FAILURE);
     }
     assert(D >= 2);
-    if (NULL == fgets(buf, sizeof(buf), stdin)) { /* ignore rest of the line */
-        fprintf(stderr, "FATAL: can not read the first line\n");
+
+    if (NULL == fgets(buf, sizeof(buf), file)) { /* ignore rest of the line */
+        fprintf(stderr, "FATAL: cannot read the first line\n");
+        fclose(file);
         exit(EXIT_FAILURE);
     }
-    if (1 != scanf("%d", &N)) {
-        fprintf(stderr, "FATAL: can not read the number of points\n");
+
+    if (1 != fscanf(file, "%d", &N)) {
+        fprintf(stderr, "FATAL: cannot read the number of points\n");
+        fclose(file);
         exit(EXIT_FAILURE);
     }
-    P = (float*)malloc( D * N * sizeof(*P) );
-    assert(P);
-    for (int i=0; i<N; i++) {
-        for (int k=0; k<D; k++) {
-            if (1 != scanf("%f", &(P[i*D + k]))) {
+
+    P = (float *)malloc(D * N * sizeof(*P));
+    if (!P) {
+        fprintf(stderr, "FATAL: memory allocation failed\n");
+        fclose(file);
+        exit(EXIT_FAILURE);
+    }
+
+    for (int i = 0; i < N; i++) {
+        for (int k = 0; k < D; k++) {
+            if (1 != fscanf(file, "%f", &(P[i * D + k]))) {
                 fprintf(stderr, "FATAL: failed to get coordinate %d of point %d\n", k, i);
+                free(P);
+                fclose(file);
                 exit(EXIT_FAILURE);
             }
         }
     }
+
+    fclose(file);
+
     points->P = P;
     points->N = N;
     points->D = D;
 }
+
 
 void free_points(points_t *points)
 {
@@ -328,6 +351,12 @@ void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_
 
 int main(int argc, char *argv[])
 {
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+    
     MPI_Init(&argc, &argv);
     points_t points;
     int rank, size;
@@ -340,7 +369,8 @@ int main(int argc, char *argv[])
 
     if (rank == 0)
     {
-        read_input(&points);
+        const char *filename = argv[1]; 
+        read_input(filename, &points);
         WORKER_NPOINTS = points.N / size;
         MASTER_NPOINTS = WORKER_NPOINTS + (points.N % size);
     }
