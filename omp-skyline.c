@@ -1,5 +1,6 @@
 /****************************************************************************
- *
+ *  Alessandro Valmori
+ *  0001089308
  * Per compilare:
  *
  *      gcc -std=c99 -Wall -Wpedantic -O2 omp-skyline.c -o omp-skyline -fopenmp
@@ -131,7 +132,6 @@ int skyline(const points_t *points, int *s)
 #pragma omp parallel for
     for (int i = 0; i < N; i++)
     {
-    
         for (int j = 0; j < N; j++)
         {
             if (s[j])

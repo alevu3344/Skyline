@@ -351,12 +351,13 @@ void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_
 
 int main(int argc, char *argv[])
 {
-
+    // Ensure proper usage by checking command-line arguments
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
         return EXIT_FAILURE;
     }
-    
+
+    // Initialize MPI environment
     MPI_Init(&argc, &argv);
     points_t points;
     int rank, size;
@@ -364,17 +365,23 @@ int main(int argc, char *argv[])
     int MASTER_NPOINTS;
     int D;
     int N;
+
+    // Determine the rank of the process and the total number of processes
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     if (rank == 0)
     {
         const char *filename = argv[1]; 
+        // Read input points from the specified file
         read_input(filename, &points);
+
+        // Calculate the number of points each worker will process
         WORKER_NPOINTS = points.N / size;
         MASTER_NPOINTS = WORKER_NPOINTS + (points.N % size);
     }
 
+    // Broadcast the number of points each process handles to all processes
     MPI_Bcast(&WORKER_NPOINTS, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&MASTER_NPOINTS, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
@@ -382,65 +389,69 @@ int main(int argc, char *argv[])
 
     if (rank == 0)
     {
+        // Start the timer on the master process
         tstart = hpc_gettime();
     }
 
     points_t local_points_struct;
 
+    // Scatter the points from the master process to all processes
     scatter_points(&points, &local_points_struct, rank, size);
 
+    // Extract the dimensionality of the points
     D = local_points_struct.D;
 
+    // Allocate memory for local skyline points and flags
     float *local_skyline_points = (float *)malloc(D * local_points_struct.N * sizeof(float));
-
     int *local_skyline = (int *)malloc(local_points_struct.N * sizeof(int));
 
+    // Compute the local skyline points
     int local_num_skyline = skyline(&local_points_struct, local_skyline);
 
-    float *local_points = local_points_struct.P;
-
-    int skyline_index = 0; // Tracks where to write in `local_skyline_points`
+    // Gather the actual skyline points based on the flags
+    int skyline_index = 0;
     for (int i = 0; i < local_points_struct.N; i++)
     {
         if (local_skyline[i] == 1)
         {
             for (int k = 0; k < D; k++)
             {
-                local_skyline_points[skyline_index * D + k] = local_points[i * D + k];
+                local_skyline_points[skyline_index * D + k] = local_points_struct.P[i * D + k];
             }
             skyline_index++;
         }
     }
+
     points_t local_sk_points_struct;
     local_sk_points_struct.D = D;
     local_sk_points_struct.N = local_num_skyline;
     local_sk_points_struct.P = local_skyline_points;
 
+    // Gather the number of skyline points from each process to the master
     int *num_skyline_points_per_process = (int *)malloc(size * sizeof(int));
-
     MPI_Gather(&local_num_skyline, 1, MPI_INT, num_skyline_points_per_process, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     int total_skyline_points = 0;
     if (rank == 0)
     {
+        // Calculate the total number of skyline points across all processes
         for (int i = 0; i < size; i++)
         {
             total_skyline_points += num_skyline_points_per_process[i];
         }
     }
 
-    
-
     points_t gathered;
 
+    // Gather all local skyline points into a single structure at the master process
     gather_points(&gathered, &local_sk_points_struct, num_skyline_points_per_process, rank, size);
 
     double elapsed;
-
     int global_num_skyline = 0;
 
     if (rank == 0)
     {
+        // Share the total number and dimensionality of gathered points
         N = gathered.N;
         D = gathered.D;
     }
@@ -448,11 +459,12 @@ int main(int argc, char *argv[])
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&D, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+    // Initialize the global skyline points array
     float *S_first = (float *)malloc(D * N * sizeof(float));
 
     if (rank == 0)
     {
-
+        // Copy gathered points into the global skyline array
         for (int i = 0; i < N; i++)
         {
             for (int j = 0; j < D; j++)
@@ -464,38 +476,37 @@ int main(int argc, char *argv[])
 
     MPI_Bcast(S_first, N * D, MPI_FLOAT, 0, MPI_COMM_WORLD);
 
+    // Partition the skyline points for each process based on offsets
     points_t partition;
     partition.D = D;
     partition.N = local_sk_points_struct.N;
 
     int *offsets = (int *)malloc(size * sizeof(int));
-
     if (rank == 0)
     {
+        // Calculate offsets for each process's portion of the global skyline
         for (int i = 0; i < size; i++)
         {
             offsets[i] = i == 0 ? 0 : (offsets[i - 1] + num_skyline_points_per_process[i - 1]);
         }
     }
 
-   
     MPI_Bcast(offsets, size, MPI_INT, 0, MPI_COMM_WORLD);
-
     partition.P = S_first + offsets[rank] * D;
 
-    
+    // Perform a second pass to remove dominated points
     int start_index = offsets[rank];
     int end_index = offsets[rank] + partition.N;
-
     int *s = (int *)malloc(partition.N * sizeof(int));
     int r = partition.N;
 
+    // Initialize all points as part of the skyline
     for (int i = 0; i < partition.N; i++)
     {
         s[i] = 1;
     }
 
-
+    // Check if any point is dominated by points in the global skyline
     for (int i = 0; i < partition.N; i++)
     {
         if (s[i])
@@ -505,13 +516,11 @@ int main(int argc, char *argv[])
             {
                 if (j == start_index)
                 {
-
                     j = end_index;
                 }
 
                 if (s[i] && dominates(&(S_first[j * D]), &(partition.P[i * D]), D))
                 {
-
                     s[i] = 0;
                     r--;
                 }
@@ -520,43 +529,38 @@ int main(int argc, char *argv[])
         }
     }
 
+    // Reduce the total number of skyline points globally
     MPI_Reduce(&r, &global_num_skyline, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
+    // Gather all skyline flags to the master process
     int *global_skyline = NULL;
     int *sizes = NULL, *displs = NULL;
-
-    // Each process sends its local size (partition.N) to the master process
     int local_size = partition.N;
+
     if (rank == 0)
     {
-        sizes = (int *)malloc(size * sizeof(int)); // Size of data from each process
+        sizes = (int *)malloc(size * sizeof(int));
     }
+
     MPI_Gather(&local_size, 1, MPI_INT, sizes, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // Master process calculates total size and displacements
-    int total_size = 0;
     if (rank == 0)
     {
-        displs = (int *)malloc(size * sizeof(int)); // Displacements in the receive buffer
-        displs[0] = 0;                              // First displacement is 0
+        displs = (int *)malloc(size * sizeof(int));
+        displs[0] = 0;
         for (int i = 1; i < size; i++)
         {
             displs[i] = displs[i - 1] + sizes[i - 1];
         }
-        total_size = displs[size - 1] + sizes[size - 1];
 
-        global_skyline = (int *)malloc(total_size * sizeof(int)); // Allocate the global buffer
+        global_skyline = (int *)malloc((displs[size - 1] + sizes[size - 1]) * sizeof(int));
     }
 
-
-    MPI_Gatherv(s, local_size, MPI_INT,
-                global_skyline, sizes, displs, MPI_INT,
-                0, MPI_COMM_WORLD);
-
-
+    MPI_Gatherv(s, local_size, MPI_INT, global_skyline, sizes, displs, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (rank == 0)
     {
+        // Print results and execution time
         elapsed = hpc_gettime() - tstart;
 
         print_skyline(&gathered, global_skyline, global_num_skyline);
@@ -566,20 +570,22 @@ int main(int argc, char *argv[])
         fprintf(stderr, "\t%d points in skyline\n\n", global_num_skyline);
         fprintf(stderr, "Execution time (s) %f\n", elapsed);
 
+        // Free dynamically allocated memory for gathered data
         free_points(&points);
         free_points(&gathered);
-
         free(global_skyline);
         free(sizes);
         free(displs);
     }
 
-    free(local_points);
+    // Clean up dynamically allocated memory
     partition.P = NULL;
     free(local_skyline);
     free(local_skyline_points);
     free(num_skyline_points_per_process);
     free(S_first);
+
+    // Finalize the MPI environment
     MPI_Finalize();
     return 0;
 }
