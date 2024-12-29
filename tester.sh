@@ -7,14 +7,13 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=2
+NUM_RUNS=10
 
 # Delete the benchmark files if they exist
 rm -f omp-benchmark.out
 rm -f mpi-benchmark.out
 
 # Output files
-serial_output="serial-benchmark.out"
 omp_output="omp-benchmark.out"
 mpi_output="mpi-benchmark.out"
 

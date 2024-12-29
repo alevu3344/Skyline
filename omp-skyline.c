@@ -114,44 +114,34 @@ int dominates(const float *p, const float *q, int D)
  * points that belongs to the skyline. The caller is responsible for
  * allocating the array `s` of length at least `points->N`.
  */
-int skyline(const points_t *points, int *s)
-{
+int skyline(const points_t *points, int *s) {
     const int D = points->D;
     const int N = points->N;
     const float *P = points->P;
-    int r = N; // Start with the total number of points
+    int r = N; 
 
-// Initialize all points as part of the skyline
-#pragma omp parallel for
-    for (int i = 0; i < N; i++)
-    {
+    #pragma omp parallel for
+    for (int i = 0; i < N; i++) {
         s[i] = 1;
     }
 
-// Compare points in parallel and adjust the skyline count
-#pragma omp parallel for
-    for (int i = 0; i < N; i++)
-    {
-        for (int j = 0; j < N; j++)
-        {
-            if (s[j])
-            {
-                if (i != j && s[j] && dominates(&(P[j * D]), &(P[i * D]), D))
-                {
-                    // Only the thread that successfully modifies `s[j]` decrements `r`
-                    #pragma omp critical
-                    {
-                            s[i] = 0;
-                            r--;
-                    }
-                    break;
+    // Each thread checks if its points are dominated
+    #pragma omp parallel for reduction(-:r)
+    for (int i = 0; i < N; i++) {
+        if (s[i]) { // Only process points currently in the skyline
+            for (int j = 0; j < N; j++) {
+                if (i != j && s[j] && dominates(&(P[j * D]), &(P[i * D]), D)) {
+                    s[i] = 0; 
+                    r--;       
+                    break;    
                 }
             }
         }
     }
 
-    return r;
+    return r; // Return the final count of skyline points
 }
+
 
 /**
  * Print the coordinates of points belonging to the skyline `s` to
