@@ -26,7 +26,8 @@ ALL: \
 	weak_scaling_5_proc.in \
 	weak_scaling_6_proc.in \
 	weak_scaling_7_proc.in \
-	weak_scaling_8_proc.in
+	weak_scaling_8_proc.in \
+	strong_scaling.in \
 
 ## a small 2d circle
 circle-N1000-D2.in:
@@ -95,6 +96,10 @@ weak_scaling_7_proc.in: inputgen
 ## weak scaling 1 processor
 weak_scaling_8_proc.in: inputgen
 	./inputgen 400000 20 > $@
+
+## weak scaling 1 processor
+strong_scaling.in: inputgen
+	./inputgen 50000 20 > $@
 
 clean:
 	\rm -f *.in inputgen
