@@ -7,7 +7,7 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=5
+NUM_RUNS=1
 
 # Delete the previous MPI output file if it exists
 mpi_output="mpi_weak_scaling.json"
@@ -89,3 +89,12 @@ done
 # End the JSON array and top-level object
 echo "  ]" >> "$mpi_output"
 echo "}" >> "$mpi_output"
+
+source ~/anaconda3/etc/profile.d/conda.sh  # Adjust this path to match your Conda installation
+
+
+conda activate
+# Generate the graphs by executing the Python script
+python -u graph_weak.py "$mpi_output"
+
+conda deactivate

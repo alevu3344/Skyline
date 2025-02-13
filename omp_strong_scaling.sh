@@ -7,7 +7,7 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=3
+NUM_RUNS=1
 
 # Define the JSON output file and remove it if it exists
 json_output="omp_strong_scaling.json"
@@ -85,3 +85,12 @@ echo "  ]" >> "$json_output"
 echo "}" >> "$json_output"
 
 echo "JSON output saved to $json_output"
+
+source ~/anaconda3/etc/profile.d/conda.sh  # Adjust this path to match your Conda installation
+
+conda activate
+
+# Generate the graphs by executing the Python script
+python -u graph_strong.py "$json_output"
+
+conda deactivate

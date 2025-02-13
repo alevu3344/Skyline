@@ -6,7 +6,7 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=5
+NUM_RUNS=1
 
 # Base number of points for weak scaling
 BASE_N=5000
@@ -115,3 +115,11 @@ done
 # End the JSON array and top-level object
 echo "  ]" >>"$omp_output"
 echo "}" >>"$omp_output"
+
+source ~/anaconda3/etc/profile.d/conda.sh  # Adjust this path to match your Conda installation
+
+conda activate
+# Generate the graphs by executing the Python script
+python -u graph_weak.py "$omp_output"
+
+conda deactivate
