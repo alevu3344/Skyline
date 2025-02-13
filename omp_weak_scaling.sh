@@ -1,65 +1,117 @@
 #!/bin/bash
 
-# Check if the datasets directory exists
+# Check if the datasets directory exists, create it if not
 if [ ! -d "datasets" ]; then
-    echo "Error: datasets directory not found!"
-    exit 1
+    mkdir datasets
 fi
 
 # Define the number of iterations
-NUM_RUNS=1
+NUM_RUNS=5
 
-# Delete the benchmark file if it exists
-omp_output="omp_weak_scaling.out"
+# Base number of points for weak scaling
+BASE_N=5000
+DIMENSIONS=10 # Number of dimensions
+
+# Path to the input generator executable
+INPUTGEN="./datasets/inputgen"
+
+GENERATE_DATASETS=1
+
+# Check if the input generator exists
+if [ ! -f "$INPUTGEN" ]; then
+    echo "Error: Input generator executable '$INPUTGEN' not found!"
+    exit 1
+fi
+
+# Delete the previous output file if it exists
+omp_output="omp_weak_scaling.json"
 rm -f "$omp_output"
 
-# Initialize the output file
-echo "Running OpenMP Weak Scaling Tests" > "$omp_output"
+# Begin JSON output with a top-level "results" object
+echo "{" >"$omp_output"
+echo '  "results": [' >>"$omp_output"
 
-# Loop through processor counts and corresponding inputs
+first_result=true
+
+# Loop through processor counts and generate inputs dynamically
 for num_proc in $(seq 1 8); do
-    input_file="datasets/weak_scaling_${num_proc}_proc.in"
-    
-    # Check if the input file exists
+
+    if [ $GENERATE_DATASETS -eq 1 ]; then
+        # Compute the number of points using weak scaling formula: N' = BASE_N * sqrt(num_proc)
+        num_points=$(echo "$BASE_N * sqrt($num_proc)" | bc -l)
+        num_points=$(printf "%.0f" "$num_points") # Round to nearest integer
+
+        # Generate the input file
+        input_file="datasets/weak_scaling_${num_proc}_proc.in"
+        echo "Generating dataset with $num_points points for $num_proc processors..."
+        $INPUTGEN "$num_points" "$DIMENSIONS" >"$input_file"
+    fi
+
+    # Check if the input file was generated
     if [ ! -f "$input_file" ]; then
-        echo "Error: Input file $input_file not found for $num_proc processors!"
+        echo "Error: no $input_file for $num_proc processors!" >&2
         continue
     fi
 
     echo "Running OpenMP tests for $input_file with $num_proc processors..."
 
-    # Initialize total time variable for the current processor count
     total_time_omp=0
+    runs_json="" # This will hold the JSON for individual runs
+    first_run=true
 
     # Run the OpenMP version NUM_RUNS times
     for i in $(seq 1 $NUM_RUNS); do
         echo "  Run $i (OpenMP) with $num_proc processors..."
-        # Set the number of threads for OpenMP
         export OMP_NUM_THREADS=$num_proc
-        # Capture stderr output to a variable and redirect stdout to /dev/null
-        stderr_output=$(./omp-skyline < "$input_file" 2>&1 > /dev/null)
+        # Capture stderr output (execution time) and redirect stdout to /dev/null
+        stderr_output=$(./omp-skyline <"$input_file" 2>&1 >/dev/null)
 
         exec_time=$(echo "$stderr_output" | grep "Execution time (s)" | awk '{print $4}')
-        
+
         # Check if exec_time is empty and skip if no time is found
         if [ -z "$exec_time" ]; then
-            echo "Error: Could not extract execution time for OpenMP (Run $i)"
+            echo "Error: Could not extract execution time for OpenMP (Run $i)" >&2
             continue
         fi
 
         total_time_omp=$(echo "$total_time_omp + $exec_time" | bc)
 
-        # Log the time to the OpenMP output file
-        echo "Run $i (OpenMP) for $input_file with $num_proc processors: $exec_time seconds" >> "$omp_output"
+        # Build the JSON object for this run
+        run_json="{\"run\": $i, \"time\": $exec_time}"
+
+        if [ "$first_run" = true ]; then
+            runs_json="$run_json"
+            first_run=false
+        else
+            runs_json="$runs_json, $run_json"
+        fi
     done
 
-    # Calculate the average for the current processor count
+    # Calculate the average time
     avg_time_omp=$(echo "$total_time_omp / $NUM_RUNS" | bc -l)
+    formatted_avg_time_omp=$(printf "%.6f" "$avg_time_omp")
 
-    # Format the average time
-    formatted_avg_time_omp=$(printf "%0.6f" $avg_time_omp)
+    # Build JSON object for this processor count (including num_points)
+    json_obj=$(
+        cat <<EOF
+    {
+      "num_processors": $num_proc,
+      "num_points": $num_points,
+      "runs": [ $runs_json ],
+      "average_time": $formatted_avg_time_omp
+    }
+EOF
+    )
 
-    # Append formatted average time to the output file
-    echo "Average time for OpenMP for $input_file with $num_proc processors: $formatted_avg_time_omp seconds" >> "$omp_output"
-    echo "------------------------------------" >> "$omp_output"
+    # If not the first result, add a comma to separate JSON objects
+    if [ "$first_result" = true ]; then
+        echo "$json_obj" >>"$omp_output"
+        first_result=false
+    else
+        echo ",$json_obj" >>"$omp_output"
+    fi
 done
+
+# End the JSON array and top-level object
+echo "  ]" >>"$omp_output"
+echo "}" >>"$omp_output"
