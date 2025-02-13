@@ -7,14 +7,11 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=1
+NUM_RUNS=3
 
-# Delete the benchmark file if it exists
-mpi_output="mpi_strong_scaling.out"
-rm -f "$mpi_output"
-
-# Initialize the output file
-echo "Running MPI Strong Scaling Tests" > "$mpi_output"
+# Define the JSON output file and remove it if it exists
+json_output="mpi_strong_scaling.json"
+rm -f "$json_output"
 
 # Fixed input file
 input_file="datasets/strong_scaling.in"
@@ -25,12 +22,21 @@ if [ ! -f "$input_file" ]; then
     exit 1
 fi
 
+# Initialize the JSON structure
+echo "{" > "$json_output"
+echo "  \"results\": [" >> "$json_output"
+
+first_entry=1
+
 # Loop through processor counts
 for num_proc in $(seq 1 8); do
     echo "Running MPI tests with $num_proc processors..."
 
     # Initialize total time variable for the current processor count
     total_time_mpi=0
+    run_results=""
+
+    first_run=1
 
     # Run the MPI version NUM_RUNS times
     for i in $(seq 1 $NUM_RUNS); do
@@ -48,17 +54,34 @@ for num_proc in $(seq 1 8); do
 
         total_time_mpi=$(echo "$total_time_mpi + $exec_time" | bc)
 
-        # Log the time to the MPI output file
-        echo "Run $i (MPI) with $num_proc processors: $exec_time seconds" >> "$mpi_output"
+        # Build JSON snippet for the current run
+        run_json="{\"run\": $i, \"time\": $exec_time}"
+        if [ $first_run -eq 1 ]; then
+            run_results="$run_json"
+            first_run=0
+        else
+            run_results+=", $run_json"
+        fi
     done
 
     # Calculate the average for the current processor count
     avg_time_mpi=$(echo "$total_time_mpi / $NUM_RUNS" | bc -l)
-
-    # Format the average time
     formatted_avg_time_mpi=$(printf "%0.6f" $avg_time_mpi)
 
-    # Append formatted average time to the output file
-    echo "Average time for MPI with $num_proc processors: $formatted_avg_time_mpi seconds" >> "$mpi_output"
-    echo "------------------------------------" >> "$mpi_output"
+    # Build JSON entry for the current processor count
+    json_entry="    {\"num_processors\": $num_proc, \"runs\": [$run_results], \"average_time\": $formatted_avg_time_mpi}"
+
+    # Append comma for all but the first entry
+    if [ $first_entry -eq 1 ]; then
+        echo "$json_entry" >> "$json_output"
+        first_entry=0
+    else
+        echo "    ,$json_entry" >> "$json_output"
+    fi
 done
+
+# Close the JSON array and the JSON object
+echo "  ]" >> "$json_output"
+echo "}" >> "$json_output"
+
+echo "JSON output saved to $json_output"

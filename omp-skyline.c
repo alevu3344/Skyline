@@ -86,7 +86,7 @@ void free_points(points_t *points)
     points->N = points->D = -1;
 }
 
-/* Returns 1 iff |p| dominates |q| */
+/* Returns 1 \iff |p| dominates |q| */
 int dominates(const float *p, const float *q, int D)
 {
     /* The following loops could be merged, but the keep them separated

@@ -7,14 +7,11 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=1
+NUM_RUNS=3
 
-# Delete the benchmark file if it exists
-omp_output="omp_strong_scaling.out"
-rm -f "$omp_output"
-
-# Initialize the output file
-echo "Running OpenMP Strong Scaling Tests" > "$omp_output"
+# Define the JSON output file and remove it if it exists
+json_output="omp_strong_scaling.json"
+rm -f "$json_output"
 
 # Fixed input file
 input_file="datasets/strong_scaling.in"
@@ -25,23 +22,30 @@ if [ ! -f "$input_file" ]; then
     exit 1
 fi
 
+# Initialize the JSON structure
+echo "{" > "$json_output"
+echo "  \"results\": [" >> "$json_output"
+
+first_entry=1
+
 # Loop through processor counts
 for num_proc in $(seq 1 8); do
     echo "Running OpenMP tests with $num_proc processors..."
 
-    # Initialize total time variable for the current processor count
     total_time_omp=0
+    run_results=""
+
+    first_run=1
 
     # Run the OpenMP version NUM_RUNS times
     for i in $(seq 1 $NUM_RUNS); do
         echo "  Run $i (OpenMP) with $num_proc processors..."
-        # Set the number of threads for OpenMP
         export OMP_NUM_THREADS=$num_proc
         # Capture stderr output to a variable and redirect stdout to /dev/null
         stderr_output=$(./omp-skyline < "$input_file" 2>&1 > /dev/null)
 
         exec_time=$(echo "$stderr_output" | grep "Execution time (s)" | awk '{print $4}')
-        
+
         # Check if exec_time is empty and skip if no time is found
         if [ -z "$exec_time" ]; then
             echo "Error: Could not extract execution time for OpenMP (Run $i)"
@@ -50,17 +54,34 @@ for num_proc in $(seq 1 8); do
 
         total_time_omp=$(echo "$total_time_omp + $exec_time" | bc)
 
-        # Log the time to the OpenMP output file
-        echo "Run $i (OpenMP) with $num_proc processors: $exec_time seconds" >> "$omp_output"
+        # Build JSON snippet for the current run
+        run_json="{\"run\": $i, \"time\": $exec_time}"
+        if [ $first_run -eq 1 ]; then
+            run_results="$run_json"
+            first_run=0
+        else
+            run_results+=", $run_json"
+        fi
     done
 
     # Calculate the average for the current processor count
     avg_time_omp=$(echo "$total_time_omp / $NUM_RUNS" | bc -l)
-
-    # Format the average time
     formatted_avg_time_omp=$(printf "%0.6f" $avg_time_omp)
 
-    # Append formatted average time to the output file
-    echo "Average time for OpenMP with $num_proc processors: $formatted_avg_time_omp seconds" >> "$omp_output"
-    echo "------------------------------------" >> "$omp_output"
+    # Build JSON entry for the current processor count
+    json_entry="    {\"num_processors\": $num_proc, \"runs\": [$run_results], \"average_time\": $formatted_avg_time_omp}"
+
+    # Append comma for all but the first entry
+    if [ $first_entry -eq 1 ]; then
+        echo "$json_entry" >> "$json_output"
+        first_entry=0
+    else
+        echo "    ,$json_entry" >> "$json_output"
+    fi
 done
+
+# Close the JSON array and the JSON object
+echo "  ]" >> "$json_output"
+echo "}" >> "$json_output"
+
+echo "JSON output saved to $json_output"
