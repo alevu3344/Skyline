@@ -9,12 +9,36 @@ fi
 # Define the number of iterations
 NUM_RUNS=10
 
+# Base number of points for weak scaling
+BASE_N=50000
+DIMENSIONS=20 # Number of dimensions
+
+# Path to the input generator executable
+INPUTGEN="./datasets/inputgen"
+
+# Check if the input generator exists
+if [ ! -f "$INPUTGEN" ]; then
+    echo "Error: Input generator executable '$INPUTGEN' not found!"
+    exit 1
+fi
+
+# Compute the number of points using weak scaling formula: N' = BASE_N * sqrt(num_proc)
+num_points=$BASE_N
+
+# Generate the input file
+input_file="datasets/strong_scaling.in"
+echo "Generating dataset with $num_points points for strong scaling..."
+$INPUTGEN "$num_points" "$DIMENSIONS" >"$input_file"
+
+# Check if the input file was generated
+if [ ! -f "$input_file" ]; then
+    echo "Error: no $input_file for $num_proc processors!" >&2
+    continue
+fi
+
 # Define the JSON output file and remove it if it exists
 json_output="omp_strong_scaling.json"
 rm -f "$json_output"
-
-# Fixed input file
-input_file="datasets/strong_scaling.in"
 
 # Check if the input file exists
 if [ ! -f "$input_file" ]; then
@@ -23,8 +47,8 @@ if [ ! -f "$input_file" ]; then
 fi
 
 # Initialize the JSON structure
-echo "{" > "$json_output"
-echo "  \"results\": [" >> "$json_output"
+echo "{" >"$json_output"
+echo "  \"results\": [" >>"$json_output"
 
 first_entry=1
 
@@ -39,10 +63,11 @@ for num_proc in $(seq 1 8); do
 
     # Run the OpenMP version NUM_RUNS times
     for i in $(seq 1 $NUM_RUNS); do
+
         echo "  Run $i (OpenMP) with $num_proc processors..."
         export OMP_NUM_THREADS=$num_proc
         # Capture stderr output to a variable and redirect stdout to /dev/null
-        stderr_output=$(./omp-skyline < "$input_file" 2>&1 > /dev/null)
+        stderr_output=$(./omp-skyline <"$input_file" 2>&1 >/dev/null)
 
         exec_time=$(echo "$stderr_output" | grep "Execution time (s)" | awk '{print $4}')
 
@@ -73,20 +98,20 @@ for num_proc in $(seq 1 8); do
 
     # Append comma for all but the first entry
     if [ $first_entry -eq 1 ]; then
-        echo "$json_entry" >> "$json_output"
+        echo "$json_entry" >>"$json_output"
         first_entry=0
     else
-        echo "    ,$json_entry" >> "$json_output"
+        echo "    ,$json_entry" >>"$json_output"
     fi
 done
 
 # Close the JSON array and the JSON object
-echo "  ]" >> "$json_output"
-echo "}" >> "$json_output"
+echo "  ]" >>"$json_output"
+echo "}" >>"$json_output"
 
 echo "JSON output saved to $json_output"
 
-source ~/anaconda3/etc/profile.d/conda.sh  # Adjust this path to match your Conda installation
+source ~/anaconda3/etc/profile.d/conda.sh # Adjust this path to match your Conda installation
 
 conda activate
 

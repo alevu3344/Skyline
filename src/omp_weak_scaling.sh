@@ -1,28 +1,5 @@
 #!/bin/bash
 
-# Check if the datasets directory exists, create it if not
-if [ ! -d "datasets" ]; then
-    mkdir datasets
-fi
-
-# Define the number of iterations
-NUM_RUNS=10
-
-# Base number of points for weak scaling
-BASE_N=5000
-DIMENSIONS=10 # Number of dimensions
-
-# Path to the input generator executable
-INPUTGEN="./datasets/inputgen"
-
-GENERATE_DATASETS=1
-
-# Check if the input generator exists
-if [ ! -f "$INPUTGEN" ]; then
-    echo "Error: Input generator executable '$INPUTGEN' not found!"
-    exit 1
-fi
-
 # Delete the previous output file if it exists
 omp_output="omp_weak_scaling.json"
 rm -f "$omp_output"
@@ -33,19 +10,33 @@ echo '  "results": [' >>"$omp_output"
 
 first_result=true
 
+NUM_RUNS=10
+
+
+# Base number of points for weak scaling
+BASE_N=50000
+DIMENSIONS=20 # Number of dimensions
+
+# Path to the input generator executable
+INPUTGEN="./datasets/inputgen"
+
+# Check if the input generator exists
+if [ ! -f "$INPUTGEN" ]; then
+    echo "Error: Input generator executable '$INPUTGEN' not found!"
+    exit 1
+fi
+
 # Loop through processor counts and generate inputs dynamically
 for num_proc in $(seq 1 8); do
 
-    if [ $GENERATE_DATASETS -eq 1 ]; then
-        # Compute the number of points using weak scaling formula: N' = BASE_N * sqrt(num_proc)
-        num_points=$(echo "$BASE_N * sqrt($num_proc)" | bc -l)
-        num_points=$(printf "%.0f" "$num_points") # Round to nearest integer
+    # Compute the number of points using weak scaling formula: N' = BASE_N * sqrt(num_proc)
+    num_points=$(echo "$BASE_N * sqrt($num_proc)" | bc -l)
+    num_points=$(printf "%.0f" "$num_points") # Round to nearest integer
 
-        # Generate the input file
-        input_file="datasets/weak_scaling_${num_proc}_proc.in"
-        echo "Generating dataset with $num_points points for $num_proc processors..."
-        $INPUTGEN "$num_points" "$DIMENSIONS" >"$input_file"
-    fi
+    # Generate the input file
+    input_file="datasets/weak_scaling_${num_proc}_proc.in"
+    echo "Generating dataset with $num_points points for $num_proc processors..."
+    $INPUTGEN "$num_points" "$DIMENSIONS" >"$input_file"
 
     # Check if the input file was generated
     if [ ! -f "$input_file" ]; then
@@ -116,7 +107,7 @@ done
 echo "  ]" >>"$omp_output"
 echo "}" >>"$omp_output"
 
-source ~/anaconda3/etc/profile.d/conda.sh  # Adjust this path to match your Conda installation
+source ~/anaconda3/etc/profile.d/conda.sh # Adjust this path to match your Conda installation
 
 conda activate
 # Generate the graphs by executing the Python script
