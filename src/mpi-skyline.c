@@ -1,14 +1,14 @@
 /****************************************************************************
  * Alessandro Valmori
  * 0001089308
- * 
+ *
  * Per compilare:
  *
  *       mpicc -std=c99 -Wall -Wpedantic -O2 mpi-skyline.c -o mpi-skyline
  *
  * Per eseguire il programma:
  *
- *       mpirun -np <num_processes> mpi-skyline < input > output  
+ *       mpirun -np <num_processes> mpi-skyline < input > output
  *
  ****************************************************************************/
 
@@ -34,7 +34,8 @@ typedef struct
 void read_input(const char *filename, points_t *points)
 {
     FILE *file = fopen(filename, "r");
-    if (!file) {
+    if (!file)
+    {
         fprintf(stderr, "FATAL: cannot open file '%s'\n", filename);
         exit(EXIT_FAILURE);
     }
@@ -43,35 +44,42 @@ void read_input(const char *filename, points_t *points)
     int N, D;
     float *P;
 
-    if (1 != fscanf(file, "%d", &D)) {
+    if (1 != fscanf(file, "%d", &D))
+    {
         fprintf(stderr, "FATAL: cannot read the dimension\n");
         fclose(file);
         exit(EXIT_FAILURE);
     }
     assert(D >= 2);
 
-    if (NULL == fgets(buf, sizeof(buf), file)) { /* ignore rest of the line */
+    if (NULL == fgets(buf, sizeof(buf), file))
+    { /* ignore rest of the line */
         fprintf(stderr, "FATAL: cannot read the first line\n");
         fclose(file);
         exit(EXIT_FAILURE);
     }
 
-    if (1 != fscanf(file, "%d", &N)) {
+    if (1 != fscanf(file, "%d", &N))
+    {
         fprintf(stderr, "FATAL: cannot read the number of points\n");
         fclose(file);
         exit(EXIT_FAILURE);
     }
 
     P = (float *)malloc(D * N * sizeof(*P));
-    if (!P) {
+    if (!P)
+    {
         fprintf(stderr, "FATAL: memory allocation failed\n");
         fclose(file);
         exit(EXIT_FAILURE);
     }
 
-    for (int i = 0; i < N; i++) {
-        for (int k = 0; k < D; k++) {
-            if (1 != fscanf(file, "%f", &(P[i * D + k]))) {
+    for (int i = 0; i < N; i++)
+    {
+        for (int k = 0; k < D; k++)
+        {
+            if (1 != fscanf(file, "%f", &(P[i * D + k])))
+            {
                 fprintf(stderr, "FATAL: failed to get coordinate %d of point %d\n", k, i);
                 free(P);
                 fclose(file);
@@ -86,7 +94,6 @@ void read_input(const char *filename, points_t *points)
     points->N = N;
     points->D = D;
 }
-
 
 void free_points(points_t *points)
 {
@@ -184,7 +191,7 @@ void print_skyline(const points_t *points, const int *s, int r)
  * This function is designed to distribute a set of points stored in the `points_t` structure
  * from the master process to all other processes in an MPI communicator. Each process, including
  * the master, will receive a subset of the points, ensuring a balanced distribution (or close to it).
- * 
+ *
  * - The master process gets an additional portion of points if the total number of points
  *   (`N`) is not evenly divisible by the number of processes (`size`).
  * - Uses MPI's `MPI_Scatterv` to perform the distribution efficiently.
@@ -222,10 +229,10 @@ void scatter_points(points_t *points, points_t *local_points, int rank, int size
     MPI_Bcast(&D, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    int WORKER_NPOINTS = N / size;
-    int MASTER_NPOINTS = WORKER_NPOINTS + (N % size);
+    int worker_npoints = N / size;
+    int master_npoints = worker_npoints + (N % size);
 
-    int local_num_points = rank == 0 ? MASTER_NPOINTS : WORKER_NPOINTS;
+    int local_num_points = rank == 0 ? master_npoints : worker_npoints;
 
     local_points->D = D;
     local_points->N = local_num_points;
@@ -242,7 +249,7 @@ void scatter_points(points_t *points, points_t *local_points, int rank, int size
         displs = (int *)malloc(size * sizeof(int));
         for (int i = 0; i < size; i++)
         {
-            sendcounts[i] = i == 0 ? (MASTER_NPOINTS * D) : WORKER_NPOINTS * D;
+            sendcounts[i] = i == 0 ? (master_npoints * D) : worker_npoints * D;
             displs[i] = i == 0 ? 0 : displs[i - 1] + sendcounts[i - 1];
         }
     }
@@ -262,7 +269,7 @@ void scatter_points(points_t *points, points_t *local_points, int rank, int size
  * This function collects subsets of points stored in the `local_points` structures of each process
  * and gathers them into a single `gathered` structure on the master process (rank 0).
  * The number of points contributed by each process is specified by the `num_skyline_points_perp` array.
- * 
+ *
  * - Uses `MPI_Gatherv` for efficient gathering of data.
  * - The data is concatenated in `gathered->P` on the master process, maintaining the order of ranks.
  *
@@ -351,39 +358,35 @@ void gather_points(points_t *gathered, points_t *local_points, int *num_skyline_
 
 int main(int argc, char *argv[])
 {
-    // Ensure proper usage by checking command-line arguments
-    if (argc != 2) {
+    if (argc != 2)
+    {
         fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    // Initialize MPI environment
     MPI_Init(&argc, &argv);
     points_t points;
     int rank, size;
-    int WORKER_NPOINTS;
-    int MASTER_NPOINTS;
+    int worker_npoints;
+    int master_npoints;
     int D;
     int N;
 
-    // Determine the rank of the process and the total number of processes
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     if (rank == 0)
     {
-        const char *filename = argv[1]; 
-        // Read input points from the specified file
+        const char *filename = argv[1];
         read_input(filename, &points);
 
-        // Calculate the number of points each worker will process
-        WORKER_NPOINTS = points.N / size;
-        MASTER_NPOINTS = WORKER_NPOINTS + (points.N % size);
+        worker_npoints = points.N / size;
+        master_npoints = worker_npoints + (points.N % size);
     }
 
     // Broadcast the number of points each process handles to all processes
-    MPI_Bcast(&WORKER_NPOINTS, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    MPI_Bcast(&MASTER_NPOINTS, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&worker_npoints, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&master_npoints, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     double tstart = 0;
 
@@ -398,7 +401,6 @@ int main(int argc, char *argv[])
     // Scatter the points from the master process to all processes
     scatter_points(&points, &local_points_struct, rank, size);
 
-    // Extract the dimensionality of the points
     D = local_points_struct.D;
 
     // Allocate memory for local skyline points and flags
@@ -422,6 +424,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    // Create a structure to hold the local skyline points
     points_t local_sk_points_struct;
     local_sk_points_struct.D = D;
     local_sk_points_struct.N = local_num_skyline;
@@ -451,11 +454,10 @@ int main(int argc, char *argv[])
 
     if (rank == 0)
     {
-        // Share the total number and dimensionality of gathered points
         N = gathered.N;
         D = gathered.D;
     }
-
+    // Share the total number and dimensionality of gathered points
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&D, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
@@ -514,6 +516,7 @@ int main(int argc, char *argv[])
             int j = 0;
             while (j < N)
             {
+                // Skip the process's own skyline points
                 if (j == start_index)
                 {
                     j = end_index;
@@ -542,6 +545,7 @@ int main(int argc, char *argv[])
         sizes = (int *)malloc(size * sizeof(int));
     }
 
+    // Gather the number of skyline points from each process to the master
     MPI_Gather(&local_size, 1, MPI_INT, sizes, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (rank == 0)
@@ -555,7 +559,8 @@ int main(int argc, char *argv[])
 
         global_skyline = (int *)malloc((displs[size - 1] + sizes[size - 1]) * sizeof(int));
     }
-
+    
+    // Gather the skyline flags from each process to the master
     MPI_Gatherv(s, local_size, MPI_INT, global_skyline, sizes, displs, MPI_INT, 0, MPI_COMM_WORLD);
 
     if (rank == 0)
@@ -585,7 +590,6 @@ int main(int argc, char *argv[])
     free(num_skyline_points_per_process);
     free(S_first);
 
-    // Finalize the MPI environment
     MPI_Finalize();
     return 0;
 }
