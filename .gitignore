@@ -1,2 +1,9 @@
 *.in
 *.out
+*.json
+*.log
+*.blg
+*.aux
+*.gz
+*.fls
+*.fdb_latexmk
