@@ -1,6 +1,5 @@
 *.in
 *.out
-*.json
 *.log
 *.blg
 *.aux
