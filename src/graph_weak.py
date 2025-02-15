@@ -39,6 +39,14 @@ def main():
         'legend.fontsize': 20,
     })
 
+    # Determine the title based on the input file name
+    if "mpi" in json_file.lower():
+        title = "MPI: Weak Scaling"
+    elif "omp" in json_file.lower():
+        title = "OpenMP: Weak Scaling"
+    else:
+        title = "Weak Scaling"
+
     # Create a plot: Average Execution Time vs. Input Size
     plt.figure(figsize=(11, 7))
     plt.plot(input_sizes, avg_times, marker='o', markersize=12, linewidth=3,
@@ -51,7 +59,7 @@ def main():
 
     plt.xlabel("Numero di punti", labelpad=15)
     plt.ylabel("Tempo di esecuzione medio (s)", labelpad=15)
-    plt.title("Tempo di esecuzione vs. Numero di punti", pad=20)
+    plt.title(title, pad=20)
     plt.grid(True, linestyle='--', linewidth=1.5)
     plt.legend()
     plt.tight_layout()

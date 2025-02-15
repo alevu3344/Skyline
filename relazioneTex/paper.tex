@@ -3,13 +3,13 @@
 \usepackage{paper}
 
 % Enter paper title to populate PDF metadata:
-\hypersetup{pdftitle={Relazione di Progetto: Parallelizzazione dell'algoritmo Skyline}}
+\hypersetup{pdftitle={Relazione di Progetto: Parallelizzazione dell'algoritmo skyline}}
 
 
 
 % Custom title definition
 \title{\vspace{-1cm} Relazione di progetto \\ Corso di High Performance Computing \\ A.A. 2024/25}
-\author{Alessandro Valmori}
+\author{Alessandro Valmori \\ Matricola: 0001089308}
 \date{\vspace{-0.3cm} \today}  % Adjust space before the date
 
 \begin{document}
@@ -25,7 +25,7 @@
 % Enter main text:
 \section{Introduzione}\label{s:introduction}
  
-Si sceglie di implementare la parallelizzazione dell'algoritmo Skyline in due diverse versioni, utilizzando prima OpenMP e poi MPI, due tecniche di parallelizzazione rispettivamente a memoria condivisa e a memoria distribuita. L'approccio alla parallelizzazione utilizzando i due paradigmi condivide la fase di partizionamento del dominio iniziale fra i processi, utilizzando in particolare un partizionamento statico a grana grossa. 
+Si sceglie di implementare la parallelizzazione dell'algoritmo skyline in due diverse versioni, utilizzando prima OpenMP e poi MPI, due tecniche di parallelizzazione rispettivamente a memoria condivisa e a memoria distribuita. L'approccio alla parallelizzazione utilizzando i due paradigmi condivide la fase di partizionamento del dominio iniziale fra i processi, utilizzando in particolare un partizionamento statico a grana grossa. 
 
 
 
@@ -51,9 +51,9 @@ Per la versione a memoria condivisa utilizzando OpenMP, si sceglie di parallelli
 \section{Versione MPI}\label{s:section}
 
 
-Per la versione a memoria distribuita utilizzando MPI è stata implementata una soluzione che presenta un processo più scandito e verboso, che comincia con la suddivisione del dominio iniziale in parti il quanto più possibile eguali fra i processi. Questo partizionamento avviene staticamente e grossolanamente dopo che il processo \texttt{master} ha letto l'insieme di punti da standard input.
+Per la versione a memoria distribuita utilizzando MPI è stata implementata una soluzione che presenta un processo più scandito e verboso, che comincia con la suddivisione del dominio iniziale in parti il quanto più possibile eguali fra i processi. Questo partizionamento avviene staticamente dopo che il processo \texttt{master} ha letto l'insieme di punti da standard input.
 
-Una volta che ciascun processo detiene la propria partizione dell'input set originale, ognuno di essi applica la versione seriale dell'algoritmo Skyline a quest'ultima, ottenendo quindi un sottoinsieme di tale partizione costituito dai punti che non sono dominati da alcun altro punto all'interno della partizione.
+Una volta che ciascun processo detiene la propria partizione dell'input set originale, ognuno di essi applica la versione seriale dell'algoritmo skyline a quest'ultima, ottenendo quindi un sottoinsieme di tale partizione costituito dai punti che non sono dominati da alcun altro punto all'interno della partizione.
 
 In seguito, il processo \texttt{master} esegue una \texttt{MPI\_Gatherv} di ciascuno skyline set locale in un unico array, di cui ne viene poi distribuita una copia a ciascun processo, in modo da consentire il confronto fra lo skyline set locale e tale array. Infine, dopo che ciascun processo ha rimosso dalla propria partizione tutti i punti dominati, avviene una chiamata alla funzione \texttt{MPI\_Reduce} per ottenere il numero totale di punti presenti nello skyline finale, seguita da un'ulteriore chiamata a \texttt{MPI\_Gatherv} per concatenare tutti i singoli array locali nello skyline finale.
 
@@ -69,19 +69,19 @@ In seguito, il processo \texttt{master} esegue una \texttt{MPI\_Gatherv} di cias
 
 \section{Prestazioni}
 
-Per valutare l'efficacia dell'implementazione parallela dell'algoritmo Skyline, sono stati condotti test mirati all'analisi dello Strong Scaling e del Weak Scaling. L'obiettivo è verificare come il tempo di esecuzione varia al variare del numero di processi, sia mantenendo fisso il carico di lavoro totale (Strong Scaling) sia mantenendo costante il carico per processo (Weak Scaling).  
+Per valutare l'efficacia dell'implementazione parallela dell'algoritmo skyline, sono stati condotti test mirati all'analisi dello strong scaling e del weak scaling. L'obiettivo è verificare come il tempo di esecuzione varia al variare del numero di processi, sia mantenendo fisso il carico di lavoro totale (strong scaling) sia mantenendo costante il carico per processo (weak scaling).  
 
-I test sono stati eseguiti su una macchina con processore Intel Core i7-1165G7 di undicesima generazione (4 core fisici, 8 thread) e 16GB di RAM. L'algoritmo è stato eseguito 10 volte per ciascuna configurazione sperimentale, e il valore finale riportato corrisponde alla media dei tempi di esecuzione ottenuti, riducendo così l'effetto di eventuali variazioni dovute a fattori esterni, come il sistema operativo o altri processi in esecuzione.  
+I test sono stati eseguiti su una macchina con processore Intel Core i7-1165G7 di undicesima generazione (4 core fisici, 8 thread) e 16GB di RAM. L'algoritmo è stato eseguito 20 volte per ciascuna configurazione sperimentale, e il valore finale riportato corrisponde alla media dei tempi di esecuzione ottenuti, riducendo così l'effetto di eventuali variazioni dovute a fattori esterni, come il sistema operativo o altri processi in esecuzione.  
 
-Per raccogliere i dati, è stato realizzato uno script bash che automatizza l'esecuzione delle prove. Lo script si occupa di lanciare il programma con diverse configurazioni di numero di processi MPI e dataset di input, redirezionando l'output standard e gli errori in un file di log per facilitare l'analisi successiva. Inoltre, un insieme di script Python è stato utilizzato per elaborare i risultati e generare grafici rappresentativi delle prestazioni ottenute.  
+Per raccogliere i dati, è stato realizzato uno script bash che automatizza l'esecuzione delle prove. Lo script si occupa di lanciare il programma con diverse configurazioni di numero di processi e dataset di input, redirezionando l'output standard e gli errori in un file di log per facilitare l'analisi successiva. Inoltre, un insieme di script Python è stato utilizzato per elaborare i risultati e generare grafici rappresentativi delle prestazioni ottenute.  
 
 \subsection{Strong Scaling}
 
-Durante la valutazione dello Strong Scaling si analizza il comportamento dell'algoritmo mantenendo costante la dimensione del problema e aumentando progressivamente il numero di processi utilizzati per l'esecuzione. L'obiettivo è osservare come varia il tempo di esecuzione e verificare se l'algoritmo è in grado di sfruttare in modo efficiente un numero crescente di processi.  
+Durante la valutazione dello strong scaling si analizza il comportamento dell'algoritmo mantenendo costante la dimensione del problema e aumentando progressivamente il numero di processi utilizzati per l'esecuzione. L'obiettivo è osservare come varia il tempo di esecuzione e verificare se l'algoritmo è in grado di sfruttare in modo efficiente un numero crescente di processi.  
 
 Per questi test, è stato scelto un dataset di dimensione fissa, ovvero 50000 punti di 20 dimensioni dapprima costituenti uno Skyline set valido, rappresentativo di un caso d'uso realistico che corrisponde anche al caso pessimo. Il numero di processi è stato variato da 1 a 8, in modo da valutare il comportamento dell'algoritmo sia in condizioni di esecuzione seriale (1 processo) sia quando si sfruttano tutte le risorse disponibili sulla macchina di test (8 processi, pari al numero massimo di thread del processore).  
 
-Idealmente, in uno scenario di perfetto Strong Scaling, il tempo di esecuzione dovrebbe ridursi proporzionalmente all'aumento del numero di processi. Tuttavia, in una situazione reale, il comportamento può essere influenzato da diversi fattori, tra cui l'overhead della comunicazione tra processi, il bilanciamento del carico e le latenze introdotte dalla gestione della memoria. 
+Idealmente, in uno scenario di perfetto strong scaling, il tempo di esecuzione dovrebbe ridursi proporzionalmente all'aumento del numero di processi. Tuttavia, in una situazione reale, il comportamento può essere influenzato da diversi fattori, tra cui l'overhead della comunicazione tra processi, il bilanciamento del carico e le latenze introdotte dalla gestione della memoria. 
 
 
 \begin{figure}[h]
@@ -89,14 +89,14 @@ Idealmente, in uno scenario di perfetto Strong Scaling, il tempo di esecuzione d
     \begin{subfigure}{0.48\textwidth} % Prima immagine occupa il 48% della larghezza
         \centering
         \includegraphics[scale=0.3]{graphs/omp_strong_scaling.pdf}
-        \caption{Tempo di esecuzione in funzione del numero di processi (Strong Scaling) di OpenMP}
+        \caption{Tempo di esecuzione in funzione del numero di processi (strong scaling) di OpenMP}
         \label{f:strong_scaling}
     \end{subfigure}
     \hfill % Aggiunge spazio tra le due immagini
     \begin{subfigure}{0.48\textwidth} % Seconda immagine
         \centering
         \includegraphics[scale=0.3]{graphs/mpi_strong_scaling.pdf}
-        \caption{Tempo di esecuzione in funzione del numero di processi (Strong Scaling) di MPI}
+        \caption{Tempo di esecuzione in funzione del numero di processi (strong scaling) di MPI}
         \label{f:strong_scaling_speedup}
     \end{subfigure}
     \caption{Analisi dello strong scaling dell'algoritmo}
@@ -107,7 +107,7 @@ Idealmente, in uno scenario di perfetto Strong Scaling, il tempo di esecuzione d
 
 \subsection{Weak Scaling}
 
-Il Weak Scaling valuta come varia il tempo di esecuzione dell'algoritmo quando sia il numero di processi (o thread) che la dimensione del problema aumentano. L'obiettivo è determinare se l'efficienza parallela rimane stabile con l'aggiunta di risorse computazionali.
+Il weak scaling valuta come varia il tempo di esecuzione dell'algoritmo quando sia il numero di processi (o thread) che la dimensione del problema aumentano. L'obiettivo è determinare se l'efficienza parallela rimane stabile con l'aggiunta di risorse computazionali.
 
 \subsubsection{Metodologia di Scalabilità}
 La complessità parallela dell'algoritmo skyline può essere espressa come:
@@ -129,7 +129,7 @@ Ogni thread è responsabile di un sottoinsieme dei confronti totali \( N^2 \), d
 \frac{N^2}{p}
 \]
 
-Per mantenere il carico di lavoro per processo costante, dobbiamo garantire che questo termine rimanga invariato all'aumentare di \( p \). Ciò porta alla condizione:
+Per mantenere il carico di lavoro per processo costante, è necessario garantire che questo termine rimanga invariato all'aumentare di \( p \). Ciò porta alla condizione:
 
 \[
 \frac{(N')^2}{p'} = \frac{N^2}{p}
@@ -142,7 +142,7 @@ dove:
 \end{itemize}
 
 \subsubsection{Derivazione del Fattore di Scalabilità}
-Riorganizzando la formula per \( N' \), otteniamo:
+Riorganizzando la formula per \( N' \), si ottiene:
 
 \[
 N' = N \times \sqrt{\frac{p'}{p}}
@@ -156,29 +156,36 @@ Questo significa che, per mantenere il carico di lavoro per processo costante, l
 
 
 \subsubsection{Risultati Sperimentali}
-Per analizzare il Weak Scaling, si sono eseguiti test in cui sia il numero di thread \( p \) che la dimensione del dataset \( N \) sono stati aumentati secondo la regola di scalabilità derivata sopra.
+Per analizzare il weak scaling, si sono eseguiti test in cui sia il numero di thread \( p \) che la dimensione del dataset \( N \) sono stati aumentati secondo la regola di scalabilità derivata sopra.
 
 \begin{figure}[h]
     \centering
     \begin{subfigure}{0.48\textwidth}
         \centering
         \includegraphics[scale=0.3]{graphs/omp_weak_scaling.pdf}
-        \caption{Risultati del Weak Scaling con OpenMP.}
+        \caption{Risultati del weak scaling con OpenMP.}
         \label{f:weak_scaling_omp}
     \end{subfigure}
     \hfill
     \begin{subfigure}{0.48\textwidth}
         \centering
         \includegraphics[scale=0.3]{graphs/mpi_weak_scaling.pdf}
-        \caption{Risultati del Weak Scaling con MPI.}
+        \caption{Risultati del weak scaling con MPI.}
         \label{f:weak_scaling_mpi}
     \end{subfigure}
-    \caption{Analisi del Weak Scaling per le implementazioni OpenMP e MPI.}
+    \caption{Analisi del weak scaling per le implementazioni OpenMP e MPI.}
     \label{f:weak_scaling_graphs}
 \end{figure}
 
 I risultati in Figura \ref{f:weak_scaling_graphs} mostrano che il tempo di esecuzione, per entrambe le tecniche utilizzate, cresce approssimativamente linearmente al variare del numero dei processi e del numero di punti nel dataset in input. Ciò è legato all'overhead di accesso alla memoria per OpenMP, mentre per quando riguarda MPI esso è causato dall'overhead di comunicazione tra i processi, che aumenta all'aumentare del numero di processi utilizzati.
-In uno scenario ideale di Weak Scaling, il tempo di esecuzione dovrebbe rimanere costante con l'aumento simultaneo della dimensione del problema e delle risorse computazionali. Tuttavia le limitazioni reali contribuiscono alle deviazioni da questo comportamento ideale.
+
+Si nota inoltre l'aumento improvviso del tempo di esecuzione quando si passa da 4 a 5 processi, ciò è dovuto al fatto che la macchina su cui sono stati eseguiti i test dispone di soli 4 core fisici, perciò utilizzare un numero di processi superiore a tale quantità porta a un incremento dell’overhead di gestione dei thread e della competizione per le risorse hardware.  
+
+Quando il numero di processi supera il numero di core fisici disponibili, i processi in eccesso vengono eseguiti sui thread logici (grazie all’hyper-threading), che condividono le unità di esecuzione dei core fisici. Questo causa un degrado delle prestazioni dovuto a diversi fattori. In primo luogo, vi è concorrenza per le unità di calcolo, poiché i processi devono condividere le stesse ALU e FPU, riducendo così l'efficienza di esecuzione. Inoltre, si verifica una maggiore pressione sulla cache: un numero elevato di processi attivi comporta un incremento nei cache miss, aumentando il numero di accessi alla memoria principale, che risulta significativamente più lenta. Infine, lo scheduling del sistema operativo introduce ulteriore overhead, poiché con più processi rispetto ai core fisici disponibili, il sistema deve gestire il contesto di esecuzione in modo più aggressivo, con un impatto negativo sulle prestazioni.  
+
+Nel caso di OpenMP, questo aumento del tempo di esecuzione è principalmente legato alla competizione per la memoria condivisa, poiché tutti i thread accedono agli stessi dati e devono sincronizzarsi frequentemente. Per quanto riguarda MPI, invece, il problema principale è l’aumento della latenza di comunicazione: con più processi distribuiti tra thread logici, i ritardi nella trasmissione dei messaggi tra i processi aumentano, degradando le prestazioni complessive.
+
+In uno scenario ideale di weak scaling, il tempo di esecuzione dovrebbe rimanere costante con l'aumento simultaneo della dimensione del problema e delle risorse computazionali. Tuttavia le limitazioni reali contribuiscono alle deviazioni da questo comportamento ideale.
 
 
 \subsection{Speedup}
@@ -195,7 +202,7 @@ Di seguito vengono riportate due tabelle riassuntive (con valori espressi in sec
 
 \begin{table}[htbp]
 \centering
-\caption{Speedup e Efficienza per lo Strong Scaling: confronto tra OpenMP e MPI}
+\caption{Speedup e Efficienza per lo strong scaling: confronto tra OpenMP e MPI}
 \label{tab:combined_speedup}
 \adjustbox{max width=\textwidth}{%
 \begin{tabular}{cc}
@@ -249,17 +256,16 @@ Di seguito vengono riportate due tabelle riassuntive (con valori espressi in sec
 
 
 
-\paragraph{Analisi dei risultati} Dall'analisi delle Tabelle \ref{tab:openmp_speedup} e \ref{tab:mpi_speedup}, emergono alcune osservazioni importanti riguardo lo scaling delle implementazioni OpenMP e MPI.
+\paragraph{Analisi dei risultati}
+Dall'analisi delle Tabelle \ref{tab:openmp_speedup} e \ref{tab:mpi_speedup}, emergono alcune osservazioni importanti riguardo lo scaling delle implementazioni OpenMP e MPI.  
 
-Innanzitutto, si nota che per entrambi i paradigmi di parallelismo lo speedup cresce all'aumentare del numero di processori, ma con un'efficienza decrescente. Questo comportamento è atteso, poiché con un numero crescente di processori l'overhead della sincronizzazione e della comunicazione diventa sempre più significativo.
+Innanzitutto, si nota che per entrambi i paradigmi di parallelismo lo speedup cresce all'aumentare del numero di processori, ma con un'efficienza decrescente. Questo comportamento è atteso, poiché con un numero crescente di processori l'overhead della sincronizzazione e della comunicazione diventa sempre più significativo.  
 
-Per quanto riguarda OpenMP, si osserva un buon incremento di speedup fino a circa 4 processori, dopodiché l'aumento diventa più contenuto. L'efficienza scende rapidamente, arrivando a valori inferiori al 50\% quando si utilizzano più di 4 processori. Questo suggerisce che l'overhead della gestione dei thread e della memoria influisce negativamente sulle prestazioni.
+Per quanto riguarda OpenMP, si osserva un buon incremento di speedup fino a circa 4 processori, dopodiché l'aumento diventa più contenuto. L'efficienza scende rapidamente, arrivando a valori inferiori al 50\% quando si utilizzano più di 4 processori. Questo suggerisce che l'overhead della gestione dei thread e della memoria influisce negativamente sulle prestazioni.  
 
-Nell'implementazione MPI, lo speedup cresce più lentamente rispetto a OpenMP, con un'efficienza che cala più rapidamente all'aumentare dei processori. Questo è dovuto al maggiore overhead della comunicazione tra i processi MPI, specialmente nelle fasi di gathering e reduce. In particolare, si nota che oltre i 4 processori il guadagno prestazionale diventa sempre meno significativo, suggerendo che la comunicazione tra i nodi limita la scalabilità.
+Nell'implementazione MPI, lo speedup cresce più lentamente rispetto a OpenMP, con un'efficienza che cala più rapidamente all'aumentare dei processori. Questo è dovuto al maggiore overhead della comunicazione tra i processi MPI, specialmente nelle fasi di gathering e reduce. In particolare, si nota che oltre i 4 processori il guadagno prestazionale diventa sempre meno significativo, suggerendo che la comunicazione tra i nodi limita la scalabilità.  
 
-Infine, entrambi i metodi mostrano un limite nella scalabilità oltre un certo numero di processori, come osservato precedentemente nell'analisi del Weak Scaling,
- il che potrebbe indicare che l'algoritmo stesso introduce overhead di sincronizzazione e comunicazione difficili da mitigare.
-
+Infine, entrambi i metodi mostrano un limite nella scalabilità oltre un certo numero di processori, come osservato precedentemente nell'analisi del weak scaling, il che potrebbe indicare che l'algoritmo stesso introduce overhead di sincronizzazione e comunicazione difficili da mitigare. Inoltre, il calo di efficienza osservato oltre i 4 processori può essere attribuito anche al fatto che la macchina di test dispone di soli 4 core fisici. Quando il numero di processori supera questa soglia, i processi iniziano a essere eseguiti sui thread logici piuttosto che su core dedicati, introducendo ulteriore competizione per le risorse di calcolo e memoria. Questo comporta un aumento della latenza nell’accesso alla memoria e una riduzione dell'efficienza del parallelismo, limitando così il miglioramento dello speedup.
 \section{Conclusioni}
 
 Dai risultati ottenuti si deduce che, per il problema analizzato, OpenMP tende a essere più efficiente di MPI in termini di speedup ed efficienza per un numero limitato di processori, grazie al minore overhead di comunicazione. Tuttavia, l'efficienza scende rapidamente all'aumentare del numero di thread.

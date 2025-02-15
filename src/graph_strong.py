@@ -32,7 +32,15 @@ def main():
     combined = sorted(zip(processors, avg_times), key=lambda x: x[0])
     sorted_processors, sorted_avg_times = zip(*combined)
 
-   # Increase global font sizes and other style parameters
+    # Determine the title based on the input file name
+    if "mpi" in json_file.lower():
+        title = "MPI: Strong Scaling"
+    elif "omp" in json_file.lower():
+        title = "OpenMP: Strong Scaling"
+    else:
+        title = "Strong Scaling"
+
+    # Increase global font sizes and other style parameters
     plt.rcParams.update({
         'font.size': 18,
         'axes.labelsize': 22,
@@ -54,7 +62,7 @@ def main():
 
     plt.xlabel("Numero di processori", labelpad=15)
     plt.ylabel("Tempo di esecuzione medio (s)", labelpad=15)
-    plt.title("Tempo di esecuzione vs. Numero di processori",pad=20)
+    plt.title(title, pad=20)
     plt.grid(True, linestyle='--', linewidth=1.5)
     plt.legend()
     plt.tight_layout()
