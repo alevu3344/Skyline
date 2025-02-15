@@ -7,7 +7,7 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=10
+NUM_RUNS=20
 
 # Define the JSON output file and remove it if it exists
 json_output="mpi_strong_scaling.json"

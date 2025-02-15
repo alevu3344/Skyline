@@ -7,7 +7,7 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=10
+NUM_RUNS=20
 
 # Delete the previous MPI output file if it exists
 mpi_output="mpi_weak_scaling.json"

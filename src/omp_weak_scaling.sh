@@ -10,7 +10,7 @@ echo '  "results": [' >>"$omp_output"
 
 first_result=true
 
-NUM_RUNS=10
+NUM_RUNS=20
 
 
 # Base number of points for weak scaling

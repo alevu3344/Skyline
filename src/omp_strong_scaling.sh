@@ -7,7 +7,7 @@ if [ ! -d "datasets" ]; then
 fi
 
 # Define the number of iterations
-NUM_RUNS=10
+NUM_RUNS=20
 
 # Base number of points for weak scaling
 BASE_N=50000
