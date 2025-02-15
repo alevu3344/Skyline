@@ -8,7 +8,7 @@
 
 
 % Custom title definition
-\title{\vspace{-1cm} Relazione di progetto \\ Corso di High Performance Computing \\ A.A. 2024-2025}
+\title{\vspace{-1cm} Relazione di progetto \\ Corso di High Performance Computing \\ A.A. 2024/25}
 \author{Alessandro Valmori}
 \date{\vspace{-0.3cm} \today}  % Adjust space before the date
 
@@ -25,14 +25,14 @@
 % Enter main text:
 \section{Introduzione}\label{s:introduction}
  
-Si sceglie di implementare la parallelizazione dell'algoritmo Skyline in due diverse versioni, utilizzando prima OpenMP e poi MPI, due tecniche di parallelizzazione rispettivamente a memoria condivisa e a memoria distribuita. L'approccio alla parallelizzazione utilizzando i due paradigmi condivide la fase di partizionamento del dominio iniziale fra i processi, utilizzando in particolare un partizionamento statico a grana grossa. 
+Si sceglie di implementare la parallelizzazione dell'algoritmo Skyline in due diverse versioni, utilizzando prima OpenMP e poi MPI, due tecniche di parallelizzazione rispettivamente a memoria condivisa e a memoria distribuita. L'approccio alla parallelizzazione utilizzando i due paradigmi condivide la fase di partizionamento del dominio iniziale fra i processi, utilizzando in particolare un partizionamento statico a grana grossa. 
 
 
 
 \section{Versione OpenMP}\label{s:section}
 
 
-Per la versione a memoria condivisa utilizzando OpenMP, si sceglie di parallellizzare il confronto fra un punto e tutti gli altri. In particolare il ciclo esterno, che itera attraverso i punti da esaminare, è stato parallellizzato utilizzando la direttiva \texttt{\#pragma omp parallel for}. Per calcolare il numero di punti nello skyline set (l'insieme di punti non dominati), è stato applicato il pattern di riduzione. Nella riduzione, il valore di \texttt{r} (il contatore che tiene traccia dei punti nello skyline) viene modificato da più thread senza conflitti grazie alla direttiva \texttt{reduction(-:r)}. Ogni volta che un punto è trovato dominante su un altro, il punto dominante viene segnato come non appartenente allo skyline (modificando l'array \texttt{s}), e il contatore \texttt{r} viene decrementato. Per evitare il controllo ripetuto di punti già rimossi dallo skyline, ogni punto viene esaminato una sola volta, e non appena si trova un punto che domina un altro, quest'ultimo viene rimosso.
+Per la versione a memoria condivisa utilizzando OpenMP, si sceglie di parallellizzare il confronto fra un punto e tutti gli altri. In particolare il ciclo esterno, che itera attraverso i punti da esaminare, è stato parallellizzato utilizzando la direttiva \texttt{\#pragma omp parallel for}. Per calcolare il numero di punti nello skyline set (l'insieme di punti non dominati), è stato applicato il pattern di riduzione. Nella riduzione, il valore di \texttt{r} (il contatore che tiene traccia dei punti nello skyline) viene modificato da più thread senza conflitti grazie alla direttiva \texttt{reduction(-:r)}. Ogni volta che un punto è trovato dominante su un altro, il punto dominato viene segnato come non appartenente allo skyline (modificando l'array \texttt{s}), e il contatore \texttt{r} viene decrementato. Per evitare il controllo ripetuto di punti già rimossi dallo skyline, ogni punto viene esaminato una sola volta, e non appena si trova un punto che domina un altro, quest'ultimo viene rimosso.
 
 
 \begin{figure}[h]
@@ -51,11 +51,11 @@ Per la versione a memoria condivisa utilizzando OpenMP, si sceglie di parallelli
 \section{Versione MPI}\label{s:section}
 
 
-Per la versione a memoria distribuita utilizzando MPI è stata implementata una soluzione che presenta un processo più scandito e verboso, che comincia con la suddivisione del dominio iniziale in parti il quanto più possibile eguali fra i processi. Questo partizionamento avviene staticamente e grossolanamente dopo che il processo \texttt{master} ha letto l’insieme di punti da standard input.
+Per la versione a memoria distribuita utilizzando MPI è stata implementata una soluzione che presenta un processo più scandito e verboso, che comincia con la suddivisione del dominio iniziale in parti il quanto più possibile eguali fra i processi. Questo partizionamento avviene staticamente e grossolanamente dopo che il processo \texttt{master} ha letto l'insieme di punti da standard input.
 
-Una volta che ciascun processo detiene la propria partizione dell’input set originale, ognuno di essi applica la versione seriale dell’algoritmo Skyline a quest’ultima, ottenendo quindi un sottoinsieme di tale partizione costituito dai punti che non sono dominati da alcun altro punto all’interno della partizione.
+Una volta che ciascun processo detiene la propria partizione dell'input set originale, ognuno di essi applica la versione seriale dell'algoritmo Skyline a quest'ultima, ottenendo quindi un sottoinsieme di tale partizione costituito dai punti che non sono dominati da alcun altro punto all'interno della partizione.
 
-In seguito, il processo \texttt{master} esegue una \texttt{MPI\_Gatherv} di ciascuno skyline set locale in un unico array, di cui ne viene poi distribuita una copia a ciascun processo, in modo da consentire il confronto fra lo skyline set locale e tale array. Infine, dopo che ciascun processo ha rimosso dalla propria partizione tutti i punti dominati, avviene una chiamata alla funzione \texttt{MPI\_Reduce} per ottenere il numero totale di punti presenti nello skyline finale, seguita da un’ulteriore chiamata a \texttt{MPI\_Gatherv} per concatenare tutti i singoli array locali nello skyline finale.
+In seguito, il processo \texttt{master} esegue una \texttt{MPI\_Gatherv} di ciascuno skyline set locale in un unico array, di cui ne viene poi distribuita una copia a ciascun processo, in modo da consentire il confronto fra lo skyline set locale e tale array. Infine, dopo che ciascun processo ha rimosso dalla propria partizione tutti i punti dominati, avviene una chiamata alla funzione \texttt{MPI\_Reduce} per ottenere il numero totale di punti presenti nello skyline finale, seguita da un'ulteriore chiamata a \texttt{MPI\_Gatherv} per concatenare tutti i singoli array locali nello skyline finale.
 
 \begin{figure}[h]
     \centering
@@ -177,13 +177,8 @@ Per analizzare il Weak Scaling, si sono eseguiti test in cui sia il numero di th
     \label{f:weak_scaling_graphs}
 \end{figure}
 
-I risultati in Figura \ref{f:weak_scaling_graphs} mostrano che:
-\begin{itemize}
-    \item OpenMP: Il tempo di esecuzione rimane relativamente stabile per un numero ridotto di thread, ma aumenta con valori più elevati a causa dell'overhead di sincronizzazione e della contesa della memoria condivisa.
-    \item MPI: La performance scala meglio inizialmente, ma l'overhead di comunicazione diventa significativo all'aumentare del numero di processi.
-\end{itemize}
-
-In uno scenario ideale di Weak Scaling, il tempo di esecuzione dovrebbe rimanere costante con l'aumento simultaneo della dimensione del problema e delle risorse computazionali. Tuttavia, limitazioni reali come contesa della memoria, overhead di comunicazione e squilibri nel bilanciamento del carico contribuiscono a deviazioni da questo comportamento ideale.
+I risultati in Figura \ref{f:weak_scaling_graphs} mostrano che il tempo di esecuzione, per entrambe le tecniche utilizzate, cresce approssimativamente linearmente al variare del numero dei processi e del numero di punti nel dataset in input. Ciò è legato all'overhead di accesso alla memoria per OpenMP, mentre per quando riguarda MPI esso è causato dall'overhead di comunicazione tra i processi, che aumenta all'aumentare del numero di processi utilizzati.
+In uno scenario ideale di Weak Scaling, il tempo di esecuzione dovrebbe rimanere costante con l'aumento simultaneo della dimensione del problema e delle risorse computazionali. Tuttavia le limitazioni reali contribuiscono alle deviazioni da questo comportamento ideale.
 
 
 \subsection{Speedup}
@@ -253,11 +248,24 @@ Di seguito vengono riportate due tabelle riassuntive (con valori espressi in sec
 
 
 
+
+\paragraph{Analisi dei risultati} Dall'analisi delle Tabelle \ref{tab:openmp_speedup} e \ref{tab:mpi_speedup}, emergono alcune osservazioni importanti riguardo lo scaling delle implementazioni OpenMP e MPI.
+
+Innanzitutto, si nota che per entrambi i paradigmi di parallelismo lo speedup cresce all'aumentare del numero di processori, ma con un'efficienza decrescente. Questo comportamento è atteso, poiché con un numero crescente di processori l'overhead della sincronizzazione e della comunicazione diventa sempre più significativo.
+
+Per quanto riguarda OpenMP, si osserva un buon incremento di speedup fino a circa 4 processori, dopodiché l'aumento diventa più contenuto. L'efficienza scende rapidamente, arrivando a valori inferiori al 50\% quando si utilizzano più di 4 processori. Questo suggerisce che l'overhead della gestione dei thread e della memoria influisce negativamente sulle prestazioni.
+
+Nell'implementazione MPI, lo speedup cresce più lentamente rispetto a OpenMP, con un'efficienza che cala più rapidamente all'aumentare dei processori. Questo è dovuto al maggiore overhead della comunicazione tra i processi MPI, specialmente nelle fasi di gathering e reduce. In particolare, si nota che oltre i 4 processori il guadagno prestazionale diventa sempre meno significativo, suggerendo che la comunicazione tra i nodi limita la scalabilità.
+
+Infine, entrambi i metodi mostrano un limite nella scalabilità oltre un certo numero di processori, come osservato precedentemente nell'analisi del Weak Scaling,
+ il che potrebbe indicare che l'algoritmo stesso introduce overhead di sincronizzazione e comunicazione difficili da mitigare.
+
 \section{Conclusioni}
 
+Dai risultati ottenuti si deduce che, per il problema analizzato, OpenMP tende a essere più efficiente di MPI in termini di speedup ed efficienza per un numero limitato di processori, grazie al minore overhead di comunicazione. Tuttavia, l'efficienza scende rapidamente all'aumentare del numero di thread.
 
+L'implementazione MPI, pur essendo più scalabile in teoria, soffre di overhead comunicativi che ne limitano il guadagno prestazionale oltre un certo numero di processori. Per migliorare la scalabilità, sarebbe utile valutare tecniche di riduzione delle comunicazioni inter-processo e ottimizzazione delle operazioni di gathering e reduce.
 
-
-
+In sintesi, per sistemi con un numero ridotto di core, OpenMP sembra essere una scelta più vantaggiosa, mentre MPI potrebbe risultare più efficace per problemi più grandi e distribuiti su cluster con una migliore gestione della comunicazione.
 
 \end{document}
